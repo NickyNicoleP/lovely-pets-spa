@@ -1,0 +1,255 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║           🎬 REFERENCIA RÁPIDA - GRABACIÓN VIDEO PET SPA SECURITY           ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 📋 PRE-GRABACIÓN (Verificar TODO)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+☑ Backend: npm start (puerto 3000)
+☑ Frontend: npm run dev (puerto 5173)
+☑ phpMyAdmin: http://localhost/phpmyadmin (ejecutar prepare_demo.sql)
+☑ OBS Studio: Configurado y listo
+☑ Google Authenticator: Instalado en móvil/emulador
+☑ Micrófono: Probado y funcionando
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎥 ESCENA 1: REGISTRO & VALIDACIÓN (2:30 min)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+URL: http://localhost:5173/login → "Regístrate"
+
+Intento 1: Contraseña DÉBIL ❌
+├─ Email: juan.perez@demo.com
+├─ Nombre: Juan
+├─ Apellido: Pérez
+├─ Password: 123456 ← RECHAZADO
+└─ Narrar: "Sistema rechaza contraseña débil"
+
+Intento 2: Contraseña FUERTE ✅
+├─ Password: Demo@Spa123!
+├─ Captcha: Resolver
+├─ Click "Registrarse"
+└─ Narrar: "Contraseña fuerte aceptada"
+
+Resultado:
+└─ Mostrar: "¡Registro exitoso!" → Redirige a login
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎥 ESCENA 2: BLOQUEO POR INTENTOS (2:00 min)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+URL: http://localhost:5173/login
+
+5 Intentos con contraseña INCORRECTA:
+├─ Email: admin@pawspa.com
+├─ Password: WrongPassword123! (x5)
+├─ Mostrar error cada vez: "Credenciales inválidas"
+└─ Intento 5 → "Cuenta bloqueada. Intenta en 15 min"
+
+Mostrar en phpMyAdmin:
+├─ Tabla: USUARIO
+├─ Buscar: admin@pawspa.com
+├─ Campo: locked_until = [fecha futura]
+└─ Campo: login_attempts = 5
+
+FIX para continuar:
+└─ Ejecutar SQL: UPDATE USUARIO SET locked_until = NULL, login_attempts = 0 WHERE email = 'admin@pawspa.com';
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎥 ESCENA 3: LOGIN & 2FA (3:00 min)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+URL: http://localhost:5173/login
+
+Login Normal:
+├─ Email: admin@pawspa.com
+├─ Password: Admin@Spa123!
+└─ Click "Iniciar Sesión"
+
+Resultado: Pantalla 2FA 🔐
+└─ "Ingresa código de 6 dígitos"
+
+Generar Código 2FA:
+├─ Abrir Google Authenticator
+├─ Buscar "PawSpa" o escanear QR
+├─ Copiar código de 6 dígitos
+└─ (Válido solo 30 seg)
+
+Ingresar Código:
+├─ Campo: [000000]
+├─ Click "Verificar"
+└─ Mostrar: Dashboard ✓
+
+Narrar: "Autenticación exitosa con 2FA"
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎥 ESCENA 4: AUDITORÍA (2:00 min)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+URL: http://localhost/phpmyadmin
+
+Navegar a:
+├─ BD: pawspa_db
+├─ Tabla: AUDIT_LOG
+└─ Click "Examinar"
+
+Mostrar Columnas:
+├─ id (ID del evento)
+├─ usuario_id (QUIÉN)
+├─ email (email del usuario)
+├─ accion (QUÉ - login_fallido, login_exitoso, 2fa_verificado, etc)
+├─ detalles (JSON con datos adicionales)
+├─ ip_address (DESDE DÓNDE)
+├─ user_agent (navegador)
+└─ created_at (CUÁNDO)
+
+Ejemplos de Eventos a Mostrar:
+├─ login_fallido (x5 intentos)
+├─ login_exitoso (admin)
+├─ 2fa_verificado
+├─ 2fa_habilitado
+└─ cambiar_password
+
+Expandir UNA FILA (detalles JSON):
+├─ Click en la fila
+├─ Ver JSON con: { rol, navegador, intentos_totales, etc }
+└─ Narrar: "Información completa y auditable"
+
+Narración:
+"Cada evento queda registrado: QUIÉN (usuario), CUÁNDO (timestamp), 
+DESDE DÓNDE (IP), QUÉ HIZO (acción). Esto es crítico para seguridad y compliance."
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎥 ESCENA 5: CAMBIO DE CONTRASEÑA (1:30 min)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+URL: http://localhost:5173/perfil (o dashboard → avatar → Perfil)
+
+Buscar: "Seguridad" o "Cambiar Contraseña"
+
+Ingresar:
+├─ Contraseña actual: Admin@Spa123!
+├─ Contraseña nueva: NewSecure456!
+├─ Confirmar contraseña: NewSecure456!
+└─ Click "Guardar"
+
+Resultado:
+└─ "Contraseña actualizada exitosamente"
+
+Verificar en phpMyAdmin:
+├─ Volver a AUDIT_LOG
+├─ Ver evento más reciente
+├─ accion: "cambiar_password"
+├─ usuario_id: 1 (admin)
+└─ Narrar: "El cambio quedó registrado y auditado"
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🎥 ESCENA 6: RESUMEN FINAL (1:00 min)
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Mostrar Diapositiva o Captura:
+
+✅ REQUERIMIENTOS CUMPLIDOS:
+
+1. ✓ Validación de Contraseña Fuerte
+   → 8+ caracteres, mayúsculas, minúsculas, números, símbolos
+
+2. ✓ Encriptación BCrypt
+   → Hash irreversible, 10 rondas
+
+3. ✓ Token de Verificación (15 min)
+   → Email de confirmación con expiración
+
+4. ✓ Bloqueo por 5 Intentos
+   → 15 minutos de bloqueo automático
+
+5. ✓ 2FA Obligatorio para Admin
+   → Google Authenticator TOTP
+
+6. ✓ Sistema de Auditoría Completo
+   → Quién, cuándo, desde dónde, qué hizo
+
+7. ✓ Email Único
+   → Validación en registro, constraint en BD
+
+8. ✓ Roles RBAC
+   → Admin, Recepción, Groomer, Cliente
+
+Narración Final:
+"Hemos demostrado cómo nuestro sistema implementa un módulo de 
+autenticación profesional. Cada característica protege datos, 
+información y la integridad del sistema. La seguridad no es un 
+lujo, es un requisito fundamental."
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ ⏱️  TIMING
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Intro (20 seg)          ├─ Presentación y objetivo
+Escena 1 (2:30)         ├─ Registro & Validación
+Escena 2 (2:00)         ├─ Bloqueo por intentos
+Escena 3 (3:00)         ├─ Login & 2FA
+Escena 4 (2:00)         ├─ Auditoría
+Escena 5 (1:30)         ├─ Cambio de contraseña
+Escena 6 (1:00)         ├─ Resumen
+Créditos (5 seg)        └─ Fin
+
+TOTAL: ~12 minutos
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🔗 CREDENCIALES
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+ADMIN:
+  Email:    admin@pawspa.com
+  Password: Admin@Spa123!
+  2FA:      ✓ Habilitado (escanear QR o usar código guardado)
+
+CLIENTE (prueba):
+  Email:    cliente@demo.com
+  Password: Cliente@123!
+
+GROOMER (prueba):
+  Email:    groomer@demo.com
+  Password: Groomer@123!
+
+───────────────────────────────────────────────────────────────────────────────
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ 🚨 TROUBLESHOOTING RÁPIDO
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Backend no inicia?
+└─ netstat -ano | find "3000" → taskkill /PID [PID] /F → npm start
+
+Frontend dice "conexión rechazada"?
+└─ Verificar: frontend/src/services/api.js → baseURL debe ser http://localhost:3000
+
+2FA no funciona?
+└─ Verificar Google Authenticator instalado → Dashboard → Setup 2FA → Escanear QR
+
+phpMyAdmin no conecta?
+└─ MySQL corriendo? → http://localhost/phpmyadmin → Login: root / (sin password)
+
+───────────────────────────────────────────────────────────────────────────────
+
+🎬 ¡LISTO PARA GRABAR!
+Consulta SCRIPT_DETALLADO_VIDEO.md para narración completa.
+
