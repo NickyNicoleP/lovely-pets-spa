@@ -22,11 +22,19 @@
   }
   
   .btn-secondary {
-    @apply bg-primary-400 text-white hover:bg-primary-500 focus:ring-primary-500 hover:-translate-y-0.5;
+    @apply bg-slate-700 text-white hover:bg-slate-800 focus:ring-slate-700 hover:-translate-y-0.5;
   }
   
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+
   .btn-outline {
     @apply border-2 border-primary-500 text-primary-600 hover:bg-primary-50 focus:ring-primary-500 font-semibold;
+  }
+
+  .input:disabled {
+    @apply opacity-70 cursor-not-allowed bg-slate-100 border-slate-200;
   }
 
   .btn-sm {

@@ -41,7 +41,7 @@ export default function Admin() {
     setErrorUsers('');
     try {
       const response = await authAPI.getUsers();
-      setUsers(Array.isArray(response.data) ? response.data : []);
+      setUsers(Array.isArray(response.data?.users) ? response.data.users : []);
     } catch (error) {
       console.error('Error cargando usuarios:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Error al cargar usuarios';

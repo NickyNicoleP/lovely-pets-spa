@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import LovelyPetsLogo from './LovelyPetsLogo';
+import Toast from './Toast';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,6 +24,8 @@ export default function Layout() {
     { path: '/notificaciones', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1h6z', label: 'Notificaciones' },
     ...(user?.rol === 'admin' ? [{ path: '/admin', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', label: 'Admin' }] : [])
   ];
+
+  const { toastMessages, removeToast } = useSocket();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -119,6 +123,13 @@ export default function Layout() {
             </div>
           </div>
         </header>
+
+        {/* Toast notifications */}
+        <div className="fixed top-24 right-4 z-50 flex w-full max-w-sm flex-col gap-3">
+          {toastMessages.map((toast) => (
+            <Toast key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
+          ))}
+        </div>
 
         {/* Page content */}
         <main className="p-4 lg:p-8">

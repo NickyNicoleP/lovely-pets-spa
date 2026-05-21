@@ -66,6 +66,10 @@ export const authAPI = {
   verifyEmail: (token) => api.get(`/auth/verify-email/${token}`),
   resendVerification: (data) => api.post('/auth/resend-verification', data),
   getUsers: () => api.get('/auth/users'),
+  createUser: (data) => api.post('/auth/users', data),
+  updateUserRole: (userId, data) => api.put(`/auth/users/${userId}/role`, data),
+  updateUserStatus: (userId, data) => api.put(`/auth/users/${userId}/status`, data),
+  deleteUser: (userId) => api.delete(`/auth/users/${userId}`),
   getCaptcha: () => api.get('/auth/captcha')
 };
 

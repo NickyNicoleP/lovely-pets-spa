@@ -50,27 +50,29 @@ export default function SessionWarningModal() {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full p-8">
+      <div role="dialog" aria-modal="true" aria-labelledby="session-warning-title" aria-describedby="session-warning-desc" className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full p-8 max-h-[90vh] overflow-y-auto">
         <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
           <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
         
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Sesión por expirar</h2>
-        <p className="text-slate-600 mb-6">
+        <h2 id="session-warning-title" className="text-2xl font-bold text-slate-900 mb-2">Sesión por expirar</h2>
+        <p id="session-warning-desc" className="text-slate-600 mb-6">
           Por inactividad, tu sesión se cerrará en <strong>{timeLeft} segundos</strong>. 
           ¿Deseas continuar?
         </p>
 
         <div className="space-y-3">
           <button
+            type="button"
             onClick={handleStayLoggedIn}
             className="btn btn-primary w-full py-3"
           >
             Continuar sesión
           </button>
           <button
+            type="button"
             onClick={handleLogout}
             className="btn btn-secondary w-full py-3"
           >

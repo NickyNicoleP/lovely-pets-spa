@@ -260,7 +260,7 @@ exports.logout = async (req, res) => {
     const userId = req.user.id;
 
     await authService.logout(userId, refreshToken);
-    res.json({ message: 'Sesi�n cerrada correctamente' });
+    res.json({ message: 'Sesión cerrada correctamente' });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -284,7 +284,7 @@ exports.enable2FA = async (req, res) => {
     const { code } = req.body;
 
     if (!code) {
-      return res.status(400).json({ error: 'C�digo es requerido' });
+      return res.status(400).json({ error: 'Código es requerido' });
     }
 
     const result = await authService.enable2FA(userId, code);

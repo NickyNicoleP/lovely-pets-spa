@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const http = require('http');
+const { initIo } = require('./socket');
 const authRoutes = require('./routes/auth');
 const usuarioRoutes = require('./routes/usuarios');
 const clienteRoutes = require('./routes/clientes');
@@ -62,8 +64,11 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+const server = http.createServer(app);
 
-app.listen(PORT, () => {
+initIo(server);
+
+server.listen(PORT, () => {
   console.log(`Servidor PawSpa corriendo en puerto ${PORT}`);
 });
 

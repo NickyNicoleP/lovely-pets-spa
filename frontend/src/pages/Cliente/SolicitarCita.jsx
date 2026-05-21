@@ -70,40 +70,40 @@ export default function SolicitarCita() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Solicitar nueva cita</h1>
-      <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow space-y-4">
+      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-3xl shadow-lg space-y-5">
         <div>
-          <label className="block font-medium">Mascota</label>
-          <select value={selectedMascota} onChange={e => setSelectedMascota(e.target.value)} required className="w-full border p-2 rounded">
+          <label htmlFor="mascota" className="block font-medium text-slate-700 mb-2">Mascota</label>
+          <select id="mascota" value={selectedMascota} onChange={e => setSelectedMascota(e.target.value)} required className="input">
             <option value="">Selecciona una mascota</option>
             {mascotas.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
           </select>
         </div>
         <div>
-          <label className="block font-medium">Servicio</label>
-          <select value={selectedServicio} onChange={e => setSelectedServicio(e.target.value)} required className="w-full border p-2 rounded">
+          <label htmlFor="servicio" className="block font-medium text-slate-700 mb-2">Servicio</label>
+          <select id="servicio" value={selectedServicio} onChange={e => setSelectedServicio(e.target.value)} required className="input">
             <option value="">Selecciona un servicio</option>
             {servicios.map(s => <option key={s.id} value={s.id}>{s.nombre} - ${s.precio_base}</option>)}
           </select>
         </div>
         <div>
-          <label className="block font-medium">Groomer</label>
-          <select value={selectedGroomer} onChange={e => setSelectedGroomer(e.target.value)} required className="w-full border p-2 rounded">
+          <label htmlFor="groomer" className="block font-medium text-slate-700 mb-2">Groomer</label>
+          <select id="groomer" value={selectedGroomer} onChange={e => setSelectedGroomer(e.target.value)} required className="input">
             <option value="">Selecciona un groomer</option>
             {groomers.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
           </select>
         </div>
         <div>
-          <label className="block font-medium">Fecha</label>
-          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full border p-2 rounded" />
+          <label htmlFor="fecha" className="block font-medium text-slate-700 mb-2">Fecha</label>
+          <input id="fecha" type="date" value={fecha} onChange={e => setFecha(e.target.value)} required className="input" />
         </div>
         <div>
-          <label className="block font-medium">Hora</label>
-          <select value={hora} onChange={e => setHora(e.target.value)} required className="w-full border p-2 rounded" disabled={!horariosDisponibles.length}>
+          <label htmlFor="hora" className="block font-medium text-slate-700 mb-2">Hora</label>
+          <select id="hora" value={hora} onChange={e => setHora(e.target.value)} required className="input" disabled={!horariosDisponibles.length}>
             <option value="">Selecciona una hora</option>
             {horariosDisponibles.map(h => <option key={h} value={h}>{h}</option>)}
           </select>
         </div>
-        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded w-full">Solicitar cita</button>
+        <button type="submit" className="btn btn-primary w-full py-3">Solicitar cita</button>
       </form>
     </div>
   );

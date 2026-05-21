@@ -5,13 +5,21 @@ export default function Agenda() {
   const [reservas, setReservas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const getLocalIsoDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
   const [formData, setFormData] = useState({
     cliente_id: '',
     mascota_id: '',
     servicio_id: '',
     hora: '',
-    observaciones: ''
+    observaciones: '',
+    promoCode: ''
   });
   const [clientes, setClientes] = useState([]);
   const [mascotas, setMascotas] = useState([]);
@@ -34,6 +42,41 @@ export default function Agenda() {
     peso: '',
     observaciones: ''
   });
+  const [promociones] = useState([
+    { codigo: 'BIENVENIDA', descuento: 15, descripcion: '15% de descuento en la primera reserva' },
+    { codigo: 'SPA20', descuento: 20, descripcion: '20% de descuento para grooming completo' },
+    { codigo: 'FIEL', descuento: 10, descripcion: '10% de descuento para clientes frecuentes' }
+  ]);
+  const sampleReservas = [
+    {
+      id: 'demo-1',
+      cliente_nombre: 'María',
+      cliente_apellido: 'Pérez',
+      mascota_nombre: 'Luna',
+      servicio_nombre: 'Baño Completo',
+      hora: '09:30',
+      precio_final: 45.0,
+      estado: 'confirmada',
+      canal_reserva: 'web',
+      observaciones: 'Demostración de agenda con reserva activa'
+    },
+    {
+      id: 'demo-2',
+      cliente_nombre: 'Carlos',
+      cliente_apellido: 'Ramírez',
+      mascota_nombre: 'Kira',
+      servicio_nombre: 'Corte de Pelo',
+      hora: '11:00',
+      precio_final: 50.0,
+      estado: 'pendiente',
+      canal_reserva: 'whatsapp',
+      observaciones: 'Ejemplo de cita para mostrar funcionalidad'
+    }
+  ];
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedReservaPago, setSelectedReservaPago] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('efectivo');
+  const [selectedPromoCode, setSelectedPromoCode] = useState('');
 
   const resumenReservas = useMemo(() => {
     const estados = { pendiente: 0, confirmada: 0, completada: 0, cancelada: 0 };
@@ -143,15 +186,62 @@ export default function Agenda() {
     }
   };
 
+  const selectedService = servicios.find((servicio) => servicio.id === Number(formData.servicio_id));
+
+  const fechaFormateada = new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  }).format(new Date(selectedDate));
+
+  const calcularPrecioConPromo = (precio, promoCode) => {
+    const promo = promociones.find((p) => p.codigo === promoCode);
+    if (!promo) return Number(precio || 0);
+    return Number((precio * (1 - promo.descuento / 100)).toFixed(2));
+  };
+
+  const handleOpenPaymentModal = (reserva) => {
+    setSelectedReservaPago(reserva);
+    setSelectedPromoCode('');
+    setPaymentMethod('efectivo');
+    setPaymentModalOpen(true);
+  };
+
+  const handleConfirmarPago = async () => {
+    if (!selectedReservaPago) return;
+
+    const precioBase = selectedReservaPago.precio_final || selectedReservaPago.precio_servicio || 0;
+    const precioCalculado = calcularPrecioConPromo(precioBase, selectedPromoCode);
+    const observacionesPago = `Pago ${paymentMethod}${selectedPromoCode ? ` con promo ${selectedPromoCode}` : ''}`;
+
+    try {
+      await agendaAPI.update(selectedReservaPago.id, {
+        estado: 'completada',
+        observaciones: observacionesPago,
+        precio_final: precioCalculado
+      });
+      setPaymentModalOpen(false);
+      setSelectedReservaPago(null);
+      setSelectedPromoCode('');
+      loadReservas();
+    } catch (error) {
+      alert(error.response?.data?.error || error.message);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const precioBase = selectedService?.precio || 0;
+    const precioCalculado = calcularPrecioConPromo(precioBase, formData.promoCode);
+
     try {
       await agendaAPI.create({
         ...formData,
-        fecha: selectedDate
+        fecha: selectedDate,
+        precio_final: precioCalculado
       });
       setShowModal(false);
-      setFormData({ cliente_id: '', mascota_id: '', servicio_id: '', hora: '', observaciones: '' });
+      setFormData({ cliente_id: '', mascota_id: '', servicio_id: '', hora: '', observaciones: '', promoCode: '' });
       loadReservas();
     } catch (error) {
       alert(error.response?.data?.error || error.message);
@@ -197,6 +287,23 @@ export default function Agenda() {
         </button>
       </div>
 
+      <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm mb-6">
+        <p className="text-sm font-semibold text-primary-700 uppercase tracking-[0.2em]">{fechaFormateada}</p>
+        <h2 className="mt-2 text-3xl font-bold text-gray-900">Módulo de recepción</h2>
+        <p className="mt-3 text-gray-600 max-w-2xl">
+          Calendario maestro, gestión de citas, clientes, pagos y promociones. Aquí puedes crear reservas, ver clientes y mascotas, registrar pagos y mostrar el avance funcional del módulo.
+        </p>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {['Citas', 'Clientes', 'Pagos', 'Promociones'].map((item) => (
+            <div key={item} className="rounded-3xl border border-gray-100 bg-gray-50 px-4 py-3 shadow-sm">
+              <p className="text-sm text-gray-500">{item}</p>
+              <p className="mt-2 text-lg font-semibold text-gray-900">Funciona</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-4 mb-6 md:grid-cols-4">
         {[
           { label: 'Reservas', value: reservas.length, accent: 'bg-primary-50 text-primary-700' },
@@ -211,10 +318,42 @@ export default function Agenda() {
         ))}
       </div>
 
+      <div className="grid gap-4 mb-6 md:grid-cols-3">
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">Total ingresado</p>
+          <p className="mt-4 text-3xl font-semibold text-green-700">
+            Bs {reservas.filter((r) => r.estado === 'completada').reduce((sum, r) => sum + Number(r.precio_final || r.precio_servicio || 0), 0).toFixed(2)}
+          </p>
+        </div>
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">Pagos pendientes</p>
+          <p className="mt-4 text-3xl font-semibold text-yellow-700">{resumenReservas.pendiente}</p>
+        </div>
+        <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+          <p className="text-sm font-medium text-gray-500">Promociones activas</p>
+          <p className="mt-4 text-3xl font-semibold text-primary-700">{promociones.length}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm mb-6">
+        <h2 className="text-lg font-semibold text-gray-900">Promociones disponibles</h2>
+        <div className="grid gap-3 mt-4 sm:grid-cols-3">
+          {promociones.map((promo) => (
+            <div key={promo.codigo} className="rounded-3xl border border-primary-100 bg-primary-50 p-4">
+              <p className="text-sm font-semibold text-primary-700">{promo.codigo}</p>
+              <p className="text-sm text-gray-600 mt-2">{promo.descripcion}</p>
+              <p className="mt-3 text-sm font-medium text-primary-700">{promo.descuento}%</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Date selector */}
       <div className="card mb-6">
         <div className="flex items-center gap-4">
           <button
+            type="button"
+            aria-label="Fecha anterior"
             onClick={() => {
               const date = new Date(selectedDate);
               date.setDate(date.getDate() - 1);
@@ -233,6 +372,8 @@ export default function Agenda() {
             className="input max-w-xs"
           />
           <button
+            type="button"
+            aria-label="Fecha siguiente"
             onClick={() => {
               const date = new Date(selectedDate);
               date.setDate(date.getDate() + 1);
@@ -259,52 +400,112 @@ export default function Agenda() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
         </div>
       ) : reservas.length === 0 ? (
-        <div className="card text-center py-12">
-          <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <p className="text-gray-500">No hay reservas para esta fecha</p>
-        </div>
-      ) : (
         <div className="space-y-4">
-          {reservas.map((reserva) => (
-            <div key={reserva.id} className="card flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-primary-50 rounded-lg flex items-center justify-center">
-                  <span className="text-lg font-bold text-primary-600">{reserva.hora.slice(0, 5)}</span>
+          <div className="card p-6 bg-primary-50 border-primary-100 text-primary-900">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em]">Reservas de demostración</p>
+            <p className="mt-3 text-gray-700">No hay reservas reales para esta fecha, pero aquí tienes ejemplos de cómo se verían las citas activas.</p>
+          </div>
+          {sampleReservas.map((reserva) => (
+            <div key={reserva.id} className="card p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-primary-50 rounded-lg flex items-center justify-center">
+                    <span className="text-lg font-bold text-primary-600">{reserva.hora}</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{reserva.cliente_nombre} {reserva.cliente_apellido}</p>
+                    <p className="text-sm text-gray-500">{reserva.mascota_nombre} - {reserva.servicio_nombre}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-gray-900">
-                    {reserva.cliente_nombre} {reserva.cliente_apellido}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {reserva.mascota_nombre} - {reserva.servicio_nombre}
-                  </p>
+                <div className="text-right space-y-2">
+                  <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${getEstadoColor(reserva.estado)}`}>
+                    {reserva.estado}
+                  </span>
+                  <p className="text-sm text-gray-500">Monto: Bs {reserva.precio_final.toFixed(2)}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className={`px-3 py-1 text-sm font-medium rounded-full ${getEstadoColor(reserva.estado)}`}>
-                  {reserva.estado}
-                </span>
-                <button
-                  onClick={() => handleDelete(reserva.id)}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-sm text-gray-500">Canal</p>
+                  <p className="mt-2 font-medium text-gray-900">{reserva.canal_reserva}</p>
+                </div>
+                <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-sm text-gray-500">Detalle</p>
+                  <p className="mt-2 text-sm text-gray-700">{reserva.observaciones}</p>
+                </div>
               </div>
             </div>
           ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {reservas.map((reserva) => {
+            const precio = reserva.precio_final || reserva.precio_servicio || 0;
+            return (
+              <div key={reserva.id} className="card p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-primary-50 rounded-lg flex items-center justify-center">
+                      <span className="text-lg font-bold text-primary-600">{reserva.hora?.slice(0, 5) ?? '--:--'}</span>
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {reserva.cliente_nombre} {reserva.cliente_apellido}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {reserva.mascota_nombre} - {reserva.servicio_nombre}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right space-y-2">
+                    <span className={`inline-flex px-3 py-1 text-sm font-medium rounded-full ${getEstadoColor(reserva.estado)}`}>
+                      {reserva.estado}
+                    </span>
+                    <p className="text-sm text-gray-500">Monto: Bs {Number(precio).toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Canal</p>
+                    <p className="mt-2 font-medium text-gray-900">{reserva.canal_reserva || 'web'}</p>
+                  </div>
+                  <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                    <p className="text-sm text-gray-500">Detalle</p>
+                    <p className="mt-2 text-sm text-gray-700">{reserva.observaciones || 'Sin observaciones'}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  {reserva.estado !== 'completada' && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPaymentModal(reserva)}
+                      className="btn btn-secondary"
+                    >
+                      Registrar pago
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(reserva.id)}
+                    className="btn btn-danger"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Nueva Reserva</h2>
+          <div role="dialog" aria-modal="true" aria-labelledby="agenda-modal-title" className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="agenda-modal-title" className="text-xl font-bold text-gray-900 mb-4">Nueva Reserva</h2>
             <form onSubmit={handleSubmit}>
               <div className="mb-4">
                 <label className="label">Cliente</label>
@@ -484,6 +685,27 @@ export default function Agenda() {
               </div>
 
               <div className="mb-4">
+                <label className="label">Promoción</label>
+                <select
+                  className="input"
+                  value={formData.promoCode || ''}
+                  onChange={(e) => setFormData({ ...formData, promoCode: e.target.value })}
+                >
+                  <option value="">Ninguna</option>
+                  {promociones.map((promo) => (
+                    <option key={promo.codigo} value={promo.codigo}>
+                      {promo.codigo} - {promo.descuento}%
+                    </option>
+                  ))}
+                </select>
+                {selectedService && formData.promoCode && (
+                  <p className="text-sm text-green-600 mt-2">
+                    Precio con promo: Bs {calcularPrecioConPromo(selectedService.precio, formData.promoCode).toFixed(2)}
+                  </p>
+                )}
+              </div>
+
+              <div className="mb-4">
                 <label className="label">Horario</label>
                 <select
                   className="input"
@@ -524,6 +746,78 @@ export default function Agenda() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {paymentModalOpen && selectedReservaPago && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="payment-modal-title" className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="payment-modal-title" className="text-xl font-bold text-gray-900 mb-4">Registrar pago</h2>
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">Reserva</p>
+                <p className="font-medium text-gray-900 mt-2">{selectedReservaPago.cliente_nombre} - {selectedReservaPago.mascota_nombre}</p>
+                <p className="text-sm text-gray-600">Servicio: {selectedReservaPago.servicio_nombre}</p>
+                <p className="text-sm text-gray-600">Hora: {selectedReservaPago.hora?.slice(0, 5) ?? '--:--'}</p>
+              </div>
+
+              <div className="grid gap-4">
+                <div>
+                  <label className="label">Método de pago</label>
+                  <select
+                    className="input"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  >
+                    <option value="efectivo">Efectivo</option>
+                    <option value="qr">QR</option>
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="link_pago">Link de pago</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Promoción</label>
+                  <select
+                    className="input"
+                    value={selectedPromoCode}
+                    onChange={(e) => setSelectedPromoCode(e.target.value)}
+                  >
+                    <option value="">Ninguna</option>
+                    {promociones.map((promo) => (
+                      <option key={promo.codigo} value={promo.codigo}>
+                        {promo.codigo} - {promo.descuento}%
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                  <p className="text-sm text-gray-500">Total a pagar</p>
+                  <p className="mt-2 text-xl font-semibold text-gray-900">
+                    Bs {calcularPrecioConPromo(selectedReservaPago.precio_final || selectedReservaPago.precio_servicio || 0, selectedPromoCode).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalOpen(false)}
+                  className="flex-1 btn btn-outline"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmarPago}
+                  className="flex-1 btn btn-primary"
+                >
+                  Confirmar pago
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

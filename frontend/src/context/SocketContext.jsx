@@ -9,7 +9,9 @@ export const useSocket = () => {
     return {
       socket: null,
       notifications: [],
-      clearNotifications: () => {}
+      toastMessages: [],
+      clearNotifications: () => {},
+      removeToast: () => {},
     };
   }
   return context;
@@ -18,6 +20,21 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [toastMessages, setToastMessages] = useState([]);
+
+  const addToast = (message, title = 'Notificación', type = 'success') => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const newToast = { id, title, message, type };
+    setToastMessages((prev) => [newToast, ...prev]);
+
+    setTimeout(() => {
+      setToastMessages((prev) => prev.filter((toast) => toast.id !== id));
+    }, 5000);
+  };
+
+  const removeToast = (toastId) => {
+    setToastMessages((prev) => prev.filter((toast) => toast.id !== toastId));
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -56,10 +73,12 @@ export const SocketProvider = ({ children }) => {
       newSocket.on('nueva_cita', (data) => {
         console.log('📬 Nueva cita:', data);
         setNotifications(prev => [`Nueva cita: ${data.mascota}`, ...prev]);
+        addToast('Se ha creado una nueva reserva', 'Nueva cita', 'success');
       });
       newSocket.on('ficha_completada', (data) => {
         console.log('📬 Ficha completada:', data);
         setNotifications(prev => [`Ficha completada para ${data.mascota}`, ...prev]);
+        addToast('Se completó una ficha de grooming', 'Grooming finalizado', 'success');
       });
 
       return () => {
@@ -73,7 +92,15 @@ export const SocketProvider = ({ children }) => {
   const clearNotifications = () => setNotifications([]);
 
   return (
-    <SocketContext.Provider value={{ socket, notifications, clearNotifications }}>
+    <SocketContext.Provider
+      value={{
+        socket,
+        notifications,
+        toastMessages,
+        clearNotifications,
+        removeToast,
+      }}
+    >
       {children}
     </SocketContext.Provider>
   );

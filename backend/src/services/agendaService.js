@@ -16,6 +16,8 @@ class AgendaService {
              m.especie as mascota_especie,
              m.raza as mascota_raza,
              c.id as cliente_id,
+             u.id as cliente_usuario_id,
+             u.id as cliente_usuario_id,
              u.nombre as cliente_nombre,
              u.apellido as cliente_apellido,
              s.id as servicio_id,
@@ -90,7 +92,7 @@ class AgendaService {
   }
 
   async create(reservaData, userId) {
-    const { mascota_id, servicio_id, groomer_id, fecha, hora, observaciones } = reservaData;
+    const { mascota_id, servicio_id, groomer_id, fecha, hora, observaciones, precio_final } = reservaData;
 
     if (!mascota_id || !servicio_id || !fecha || !hora) {
       throw new Error('Datos incompletos para crear la reserva');
@@ -117,6 +119,10 @@ class AgendaService {
     const startDate = fechaHoraInicio.toISOString().slice(0, 19).replace('T', ' ');
     const endDate = fechaHoraFin.toISOString().slice(0, 19).replace('T', ' ');
 
+    const precioFinal = precio_final != null && !Number.isNaN(Number(precio_final))
+      ? Number(precio_final)
+      : precio_base;
+
     let asignadoGroomerId = null;
     if (groomer_id) {
       const [groomerExists] = await pool.execute('SELECT id FROM GROOMER WHERE id = ?', [groomer_id]);
@@ -138,7 +144,7 @@ class AgendaService {
     const [result] = await pool.execute(
       `INSERT INTO SLOT_RESERVA (groomer_id, mascota_id, servicio_id, fecha_hora, fecha_hora_fin, precio_final, estado, canal_reserva)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [asignadoGroomerId, mascota_id, servicio_id, startDate, endDate, precio_base, 'pendiente', 'web']
+      [asignadoGroomerId, mascota_id, servicio_id, startDate, endDate, precioFinal, 'pendiente', 'web']
     );
 
     await authService.registrarAudit(userId, null, null, null, 'crear_reserva', reservaData);
@@ -164,7 +170,7 @@ class AgendaService {
 
   async update(id, reservaData, userId) {
     const reservaAnterior = await this.getById(id);
-    const { fecha, hora, estado, observaciones } = reservaData;
+    const { fecha, hora, estado, observaciones, precio_final } = reservaData;
 
     let updateFields = [];
     let params = [];
@@ -177,6 +183,11 @@ class AgendaService {
     if (observaciones !== undefined) {
       updateFields.push('observaciones = ?');
       params.push(observaciones);
+    }
+
+    if (precio_final !== undefined) {
+      updateFields.push('precio_final = ?');
+      params.push(precio_final);
     }
 
     if (fecha || hora) {

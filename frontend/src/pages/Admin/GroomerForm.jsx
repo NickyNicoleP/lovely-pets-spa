@@ -40,8 +40,9 @@ export default function GroomerForm({ groomer, onClose, onSave }) {
   const loadUsers = async () => {
     try {
       const response = await authAPI.getUsers();
+      const users = Array.isArray(response.data?.users) ? response.data.users : [];
       // Filtrar usuarios con rol 'empleado' que no sean groomers ya
-      const empleados = response.data.filter(u => 
+      const empleados = users.filter(u => 
         u.rol === 'empleado' && !u.groomer
       );
       setUsers(empleados);
