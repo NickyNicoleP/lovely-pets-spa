@@ -3,7 +3,10 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 
 exports.getAll = async (req, res) => {
   try {
-    const mascotas = await mascotaService.getAll();
+    // ✅ SEGURIDAD: pasar userId y rol para filtrar
+    const userId = req.user ? req.user.id : null;
+    const userRole = req.user ? req.user.rol : null;
+    const mascotas = await mascotaService.getAll(userId, userRole);
     res.json(mascotas);
   } catch (error) {
     res.status(500).json({ error: error.message });

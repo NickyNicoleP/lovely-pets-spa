@@ -1,5 +1,6 @@
 const fichaGroomingService = require('../services/fichaGroomingService');
 const notificacionService = require('../services/notificacionService');
+const checklistValidator = require('../middleware/checklistValidator');
 const pool = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { emitToUser } = require('../socket');
@@ -91,5 +92,47 @@ exports.getEstadisticas = async (req, res) => {
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+// ✅ SEGURIDAD: Obtener checklist de la ficha
+exports.getChecklist = async (req, res) => {
+  try {
+    const fichaId = req.params.id;
+    const checklistSummary = await checklistValidator.getChecklistSummary(fichaId);
+    res.json(checklistSummary);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// ✅ SEGURIDAD: Actualizar ítem del checklist
+exports.updateChecklistItem = async (req, res) => {
+  try {
+    const { id: fichaId, itemKey } = req.params;
+    const { completed } = req.body;
+    const userId = req.user.id;
+
+    if (completed === undefined) {
+      return res.status(400).json({ error: 'Estado del ítem (completed) es requerido' });
+    }
+
+    // Actualizar ítem
+    await checklistValidator.updateChecklistItem(fichaId, itemKey, completed);
+
+    // Obtener resumen actualizado
+    const checklistSummary = await checklistValidator.getChecklistSummary(fichaId);
+
+    // Registrar en auditoría
+    console.log(`[CHECKLIST] Usuario ${userId} actualizó ítem ${itemKey} en ficha ${fichaId} a ${completed}`);
+
+    res.json({
+      message: 'Ítem del checklist actualizado',
+      itemKey,
+      completed,
+      checklistSummary
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 };

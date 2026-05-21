@@ -95,9 +95,10 @@ class FichaGroomingService {
       `SELECT fi.*, p.nombre as producto_nombre, p.precio as producto_precio
        FROM FICHA_INSUMO fi
        JOIN PRODUCTO p ON fi.producto_id = p.id
-       WHERE fi.ficha_grooming_id = ?`,
+       WHERE fi.ficha_id = ?`,
       [id]
     );
+
 
     const ficha = fichas[0];
     ficha.insumos = insumos;
@@ -184,7 +185,7 @@ class FichaGroomingService {
     }
 
     await pool.execute(
-      'INSERT INTO FICHA_INSUMO (ficha_grooming_id, producto_id, cantidad) VALUES (?, ?, ?)',
+      'INSERT INTO FICHA_INSUMO (ficha_id, producto_id, cantidad) VALUES (?, ?, ?)',
       [fichaId, producto_id, cantidad]
     );
 
@@ -209,11 +210,48 @@ class FichaGroomingService {
 
     const fichaAnterior = fichas[0];
 
+    // Validar checklist: debe existir y todos los items deben estar realizados
+    const [checklistItems] = await pool.execute(
+      'SELECT * FROM CHECKLIST_ITEM WHERE ficha_id = ?',
+      [fichaId]
+    );
+    if (!checklistItems || checklistItems.length === 0) {
+      throw new Error('Checklist vacío: complete los items antes de cerrar la ficha');
+    }
+    const incomplete = checklistItems.find((it) => it.realizado === 0 || it.realizado === false);
+    if (incomplete) {
+      throw new Error('Checklist incompleto: marque todos los items como realizados antes de cerrar');
+    }
+
+    // Validar que existan fotos de evidencia (al menos una)
+    const [fotos] = await pool.execute(
+      'SELECT * FROM FOTO_SERVICIO WHERE ficha_id = ?',
+      [fichaId]
+    );
+    if (!fotos || fotos.length === 0) {
+      throw new Error('Faltan fotos de evidencia: suba al menos una foto antes de cerrar');
+    }
+
+    // Validar insumos registrados y stock (si hay insumos registrados)
+    const [insumos] = await pool.execute(
+      `SELECT fi.*, p.stock as producto_stock, p.nombre as producto_nombre
+       FROM FICHA_INSUMO fi JOIN PRODUCTO p ON fi.producto_id = p.id
+       WHERE fi.ficha_id = ?`,
+      [fichaId]
+    );
+    if (insumos && insumos.length > 0) {
+      const negative = insumos.find((i) => i.producto_stock < 0);
+      if (negative) {
+        throw new Error(`Stock insuficiente para el insumo ${negative.producto_nombre}`);
+      }
+    }
+
     await pool.execute(
       'UPDATE FICHA_GROOMING SET fecha_cierre = NOW() WHERE id = ?',
       [fichaId]
     );
 
+    // Mantener estado 'completada' compatible con frontend; emite notificación como 'finalizada'
     await pool.execute(
       'UPDATE SLOT_RESERVA SET estado = ? WHERE id = ?',
       ['completada', fichaAnterior.reserva_id]

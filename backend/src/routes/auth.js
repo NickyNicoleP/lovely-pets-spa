@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requireRole, blacklistToken } = require('../middleware/auth');
+const { rateLimitLogin } = require('../middleware/rateLimiter');
 
 // Rutas públicas
 router.post('/register', authController.register);
-router.post('/login', authController.login);
+router.post('/login', rateLimitLogin, authController.login);
 router.post('/verify-2fa', authController.verify2FA);
 router.post('/refresh', authController.refresh);
 router.get('/verify-email/:token', authController.verifyEmail);

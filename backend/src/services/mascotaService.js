@@ -2,14 +2,29 @@ const pool = require('../config/database');
 const authService = require('./authService');
 
 class MascotaService {
-  async getAll() {
-    const [mascotas] = await pool.execute(
-      `SELECT m.*, u.nombre as cliente_nombre, u.apellido as cliente_apellido
-       FROM MASCOTA m
-       JOIN CLIENTE c ON m.cliente_id = c.id
-       JOIN USUARIO u ON c.usuario_id = u.id
-       ORDER BY m.id DESC`
-    );
+  /**
+   * Obtener todas las mascotas
+   * - Si userId es admin, devuelve todas
+   * - Si userId es cliente, devuelve solo sus mascotas
+   * - Si userId es empleado/groomer, devuelve todas (para atenderlas)
+   */
+  async getAll(userId = null, userRole = null) {
+    let query = `SELECT m.*, u.nombre as cliente_nombre, u.apellido as cliente_apellido
+                 FROM MASCOTA m
+                 JOIN CLIENTE c ON m.cliente_id = c.id
+                 JOIN USUARIO u ON c.usuario_id = u.id`;
+    let params = [];
+
+    // Si es cliente, filtrar solo sus mascotas
+    if (userRole === 'cliente' && userId) {
+      query += ` WHERE c.usuario_id = ?`;
+      params.push(userId);
+    }
+    // Si es admin/empleado/groomer, ver todas (para gestión)
+
+    query += ` ORDER BY m.id DESC`;
+
+    const [mascotas] = await pool.execute(query, params);
     return mascotas;
   }
 

@@ -1,6 +1,6 @@
 const authService = require('../services/authService');
 const auditService = require('../services/auditService');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken, requireRole, blacklistToken } = require('../middleware/auth');
 
 // Registro de usuario
 exports.register = async (req, res) => {
@@ -356,6 +356,13 @@ exports.logout = async (req, res) => {
   try {
     const { refreshToken } = req.body;
     const userId = req.user.id;
+    const token = req.token; // Obtenido del middleware authenticateToken
+
+    // Invalidar el token actual
+    if (token) {
+      blacklistToken(token);
+    }
+
     await authService.logout(userId, refreshToken);
     res.json({ message: 'Sesión cerrada correctamente' });
   } catch (error) {
@@ -447,67 +454,6 @@ exports.getCaptcha = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
-// Logout
-exports.logout = async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    const userId = req.user.id;
-
-    await authService.logout(userId, refreshToken);
-    res.json({ message: 'Sesión cerrada correctamente' });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Configurar 2FA
-exports.setup2FA = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const result = await authService.setup2FA(userId);
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Habilitar 2FA
-exports.enable2FA = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { code } = req.body;
-
-    if (!code) {
-      return res.status(400).json({ error: 'Código es requerido' });
-    }
-
-    const result = await authService.enable2FA(userId, code);
-    res.json(result);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Deshabilitar 2FA
-exports.disable2FA = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { password } = req.body;
-
-    if (!password) {
-      return res.status(400).json({ error: 'Contraseña es requerida' });
-    }
-
-    await authService.disable2FA(userId, password);
-    res.json({ message: '2FA deshabilitado correctamente' });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Alias para getUsers
-exports.getAllUsers = exports.getUsers;
 
 // Alias para createUserByAdmin
 exports.createUser = exports.createUserByAdmin;
