@@ -216,11 +216,15 @@ class FichaGroomingService {
       [fichaId]
     );
     if (!checklistItems || checklistItems.length === 0) {
-      throw new Error('Checklist vacío: complete los items antes de cerrar la ficha');
+      const error = new Error('Checklist vacío: complete los items antes de cerrar la ficha');
+      error.statusCode = 'CHECKLIST_INCOMPLETE';
+      throw error;
     }
     const incomplete = checklistItems.find((it) => it.realizado === 0 || it.realizado === false);
     if (incomplete) {
-      throw new Error('Checklist incompleto: marque todos los items como realizados antes de cerrar');
+      const error = new Error('Checklist incompleto: marque todos los items como realizados antes de cerrar');
+      error.statusCode = 'CHECKLIST_INCOMPLETE';
+      throw error;
     }
 
     // Validar que existan fotos de evidencia (al menos una)
@@ -229,7 +233,9 @@ class FichaGroomingService {
       [fichaId]
     );
     if (!fotos || fotos.length === 0) {
-      throw new Error('Faltan fotos de evidencia: suba al menos una foto antes de cerrar');
+      const error = new Error('Faltan fotos de evidencia: suba al menos una foto antes de cerrar');
+      error.statusCode = 'CHECKLIST_INCOMPLETE';
+      throw error;
     }
 
     // Validar insumos registrados y stock (si hay insumos registrados)

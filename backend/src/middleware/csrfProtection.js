@@ -29,6 +29,8 @@ const CSRF_EXEMPT_ENDPOINTS = [
   '/api/auth/verify-email',
   '/api/auth/resend-verification',
   '/api/auth/captcha',
+  '/api/auth/logout',
+  '/api/agenda',
   '/api/health'
 ];
 
@@ -101,6 +103,13 @@ const validateCSRF = (req, res, next) => {
 
   // Saltarse CSRF para endpoints exentos
   if (CSRF_EXEMPT_ENDPOINTS.some(endpoint => req.path.startsWith(endpoint))) {
+    return next();
+  }
+
+  // Si la autenticación es por JWT Bearer header, no se requiere CSRF
+  // porque el token no se envía automáticamente desde un origen malicioso.
+  const authHeader = req.headers['authorization'];
+  if (authHeader) {
     return next();
   }
 

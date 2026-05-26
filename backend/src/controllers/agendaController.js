@@ -1,7 +1,6 @@
 const agendaService = require('../services/agendaService');
 const notificacionService = require('../services/notificacionService');
 const pool = require('../config/database');
-const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
 const { emitToUser } = require('../socket');
 
 exports.getAll = async (req, res) => {
@@ -11,7 +10,7 @@ exports.getAll = async (req, res) => {
       estado: req.query.estado,
       cliente_id: req.query.cliente_id
     };
-    const agenda = await agendaService.getAll(filters);
+    const agenda = await agendaService.getAll(filters, req.user.id, req.user.rol);
     res.json(agenda);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -20,7 +19,7 @@ exports.getAll = async (req, res) => {
 
 exports.getById = async (req, res) => {
   try {
-    const agenda = await agendaService.getById(req.params.id);
+    const agenda = await agendaService.getById(req.params.id, req.user.id, req.user.rol);
     res.json(agenda);
   } catch (error) {
     res.status(404).json({ error: error.message });
@@ -29,11 +28,8 @@ exports.getById = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null;
-    if (!userId) {
-      return res.status(401).json({ error: 'Debe iniciar sesión para crear una reserva' });
-    }
-    const reserva = await agendaService.create(req.body, userId);
+    const userId = req.user.id;
+    const reserva = await agendaService.create(req.body, userId, req.user.rol);
 
     const [usuarioRows] = await pool.execute(
       `SELECT u.id FROM MASCOTA m
@@ -69,7 +65,7 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null;
+    const userId = req.user.id;
     const reserva = await agendaService.update(req.params.id, req.body, userId);
 
     if (req.body.estado) {
@@ -116,7 +112,7 @@ exports.update = async (req, res) => {
 
 exports.delete = async (req, res) => {
   try {
-    const userId = req.user ? req.user.id : null;
+    const userId = req.user.id;
     const result = await agendaService.delete(req.params.id, userId);
     res.json(result);
   } catch (error) {
@@ -126,8 +122,8 @@ exports.delete = async (req, res) => {
 
 exports.getHorariosDisponibles = async (req, res) => {
   try {
-    const { fecha, servicio_id, groomer_id } = req.query;
-    const horarios = await agendaService.getHorariosDisponibles(fecha, servicio_id, groomer_id);
+    const { fecha, servicio_id, groomer_id, mascota_id } = req.query;
+    const horarios = await agendaService.getHorariosDisponibles(fecha, servicio_id, groomer_id, mascota_id);
     res.json(horarios);
   } catch (error) {
     res.status(400).json({ error: error.message });

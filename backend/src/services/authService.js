@@ -8,6 +8,25 @@ const { validatePasswordStrength } = require('../utils/passwordValidator');
 require('dotenv').config();
 
 class AuthService {
+  normalizeRole(role) {
+    if (!role || typeof role !== 'string') return role;
+    if (role === 'administrador') return 'admin';
+    return role;
+  }
+
+  normalizeUser(user) {
+    if (!user || typeof user !== 'object') return user;
+    return {
+      ...user,
+      rol: this.normalizeRole(user.rol)
+    };
+  }
+
+  normalizeUsers(users) {
+    if (!Array.isArray(users)) return users;
+    return users.map((user) => this.normalizeUser(user));
+  }
+
   // Registrar nuevo usuario (solo clientes públicos)
   async register(userData) {
     const { email, password, nombre, apellido, telefono, ci, direccion, rol = 'cliente', captchaToken, captchaAnswer } = userData;
@@ -82,9 +101,9 @@ class AuthService {
       throw new Error('Nombre, apellido, email y contraseña son requeridos');
     }
 
-    const validRoles = ['admin', 'empleado', 'cliente', 'veterinario'];
+    const validRoles = ['admin', 'administrador', 'empleado', 'cliente', 'veterinario', 'groomer'];
     if (!validRoles.includes(rol)) {
-      throw new Error('Rol inválido. Solo se permite admin, empleado, cliente o veterinario.');
+      throw new Error('Rol inválido. Solo se permite admin, administrador, empleado, cliente, veterinario o groomer.');
     }
 
     const passwordValidation = validatePasswordStrength(password);
@@ -120,7 +139,7 @@ class AuthService {
       );
     }
 
-    if (rol === 'empleado' && userData.isGroomer) {
+    if (rol === 'groomer' || (rol === 'empleado' && userData.isGroomer)) {
       await pool.execute(
         `INSERT INTO GROOMER (usuario_id, ci, direccion, especialidades, turno, disponibilidad_semanal, activo) VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
         [result.insertId, ci || null, direccion || null, userData.especialidades || 'corte básico', userData.turno || 'rotativo', JSON.stringify({ lunes: true, martes: true, miercoles: true, jueves: true, viernes: true, sabado: false, domingo: false })]
@@ -167,7 +186,7 @@ class AuthService {
     }
 
     // Verificar si el correo fue verificado
-    if (!user.email_verificado) {
+    if (!user.email_verificado && user.rol !== 'admin' && process.env.ALLOW_UNVERIFIED_LOGIN !== 'true') {
       throw new Error('Por favor verifica tu correo antes de continuar');
     }
 
@@ -252,9 +271,11 @@ class AuthService {
 
   // Generar tokens y actualizar usuario
   async generarTokensYActualizarUsuario(user, ipAddress, userAgent) {
+    const normalizedRole = this.normalizeRole(user.rol);
+
     // Generar JWT
     const accessToken = jwt.sign(
-      { id: user.id, email: user.email, rol: user.rol },
+      { id: user.id, email: user.email, rol: normalizedRole },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
     );
@@ -273,7 +294,7 @@ class AuthService {
     );
 
     // Registrar login exitoso
-    await this.registrarAudit(user.id, user.email, ipAddress, userAgent, 'login_exitoso', { rol: user.rol });
+    await this.registrarAudit(user.id, user.email, ipAddress, userAgent, 'login_exitoso', { rol: normalizedRole });
 
     return {
       accessToken,
@@ -283,7 +304,7 @@ class AuthService {
         email: user.email,
         nombre: user.nombre,
         apellido: user.apellido,
-        rol: user.rol,
+        rol: normalizedRole,
         telefono: user.telefono
       }
     };
@@ -308,7 +329,7 @@ class AuthService {
 
       // Generar nuevo access token
       const accessToken = jwt.sign(
-        { id: user.id, email: user.email, rol: user.rol },
+        { id: user.id, email: user.email, rol: this.normalizeRole(user.rol) },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
       );
@@ -356,6 +377,32 @@ class AuthService {
     await this.registrarAudit(user.id, user.email, null, null, 'email_verificado', {});
 
     return { message: 'Email verificado correctamente', userId: user.id };
+  }
+
+  async verifyEmailByAdmin(userId) {
+    const [users] = await pool.execute(
+      'SELECT * FROM USUARIO WHERE id = ?',
+      [userId]
+    );
+
+    if (users.length === 0) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    const user = users[0];
+
+    if (user.email_verificado) {
+      return { message: 'El email ya está verificado', userId: user.id };
+    }
+
+    await pool.execute(
+      'UPDATE USUARIO SET email_verificado = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = ?',
+      [user.id]
+    );
+
+    await this.registrarAudit(user.id, user.email, null, null, 'email_verificado_manual', {});
+
+    return { message: 'Email verificado manualmente', userId: user.id };
   }
 
   // Reenviar email de verificación
@@ -617,7 +664,7 @@ class AuthService {
       throw new Error('Usuario no encontrado');
     }
 
-    return users[0];
+    return this.normalizeUser(users[0]);
   }
 
   // Obtener todos los usuarios (solo admin)
@@ -626,7 +673,7 @@ class AuthService {
       'SELECT id, email, nombre, apellido, rol, telefono, activo, email_verificado, twofa_secret, ultimo_login, created_at FROM USUARIO ORDER BY created_at DESC'
     );
 
-    return users;
+    return this.normalizeUsers(users);
   }
 
   // Actualizar usuario
@@ -670,6 +717,29 @@ class AuthService {
       'UPDATE USUARIO SET rol = ? WHERE id = ?',
       [newRole, userId]
     );
+
+    // Crear/activar groomer si pasa a groomer
+    if (newRole === 'groomer') {
+      const [existingGroomer] = await pool.execute(
+        'SELECT id FROM GROOMER WHERE usuario_id = ? LIMIT 1',
+        [userId]
+      );
+
+      if (existingGroomer.length > 0) {
+        await pool.execute('UPDATE GROOMER SET activo = TRUE WHERE usuario_id = ?', [userId]);
+      } else {
+        await pool.execute(
+          `INSERT INTO GROOMER (usuario_id, ci, direccion, especialidades, turno, disponibilidad_semanal, activo)
+           VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+          [userId, users[0].ci || null, users[0].direccion || null, 'corte básico', 'rotativo', JSON.stringify({ lunes: true, martes: true, miercoles: true, jueves: true, viernes: true, sabado: false, domingo: false })]
+        );
+      }
+    }
+
+    // Desactivar groomer si deja de ser groomer
+    if (oldRole === 'groomer' && newRole !== 'groomer') {
+      await pool.execute('UPDATE GROOMER SET activo = FALSE WHERE usuario_id = ?', [userId]);
+    }
 
     // Registrar auditoría
     await this.registrarAudit(adminId, null, null, null, 'cambio_rol', {

@@ -1,36 +1,31 @@
-// fileController.js - Manejo de subida de archivos (imágenes)
+// fileController.js - Manejo de subida de archivos
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const multer = require('multer');
 
-// Configuración de multer para subida de archivos
 const uploadDir = path.join(__dirname, '../../uploads/productos');
 
-// Crear directorio si no existe
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Configurar almacenamiento
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
-    // Generar nombre único para el archivo
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'producto-' + uniqueSuffix + path.extname(file.originalname));
+    const safeName = path.parse(file.originalname).name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40);
+    const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+    cb(null, `${safeName}-${uniqueSuffix}${path.extname(file.originalname).toLowerCase()}`);
   }
 });
 
-// Filtro para permitir solo imágenes
+const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+
 const fileFilter = (req, file, cb) => {
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-  
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Solo se permiten archivos de imagen (JPEG, PNG, GIF, WebP)'));
+    cb(new Error('Solo se permiten archivos JPEG, PNG, GIF, WebP o PDF.'));
   }
 };
 
@@ -38,28 +33,23 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB máximo
+    fileSize: 10 * 1024 * 1024 // 10MB máximo
   }
 });
 
-/**
- * Subir imagen de producto
- */
-exports.uploadProductImage = [
-  upload.single('imagen'),
+const uploadProductFile = [
+  upload.single('archivo'),
   async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No se proporcionó archivo' });
       }
 
-      // Ruta relativa para guardar en BD
-      const imagePath = `/uploads/productos/${req.file.filename}`;
-      
+      const filePath = `/uploads/productos/${req.file.filename}`;
       res.json({
         success: true,
         filename: req.file.filename,
-        path: imagePath,
+        path: filePath,
         size: req.file.size,
         mimetype: req.file.mimetype
       });
@@ -69,36 +59,36 @@ exports.uploadProductImage = [
   }
 ];
 
-/**
- * Eliminar imagen de producto
- */
-exports.deleteProductImage = async (req, res) => {
+const deleteProductFile = async (req, res) => {
   try {
     const { filename } = req.body;
-    
     if (!filename) {
       return res.status(400).json({ error: 'No se proporcionó nombre de archivo' });
     }
 
     const filePath = path.join(uploadDir, filename);
-    
-    // Verificar que el archivo existe y está en el directorio permitido
     const realPath = path.resolve(filePath);
     const realUploadDir = path.resolve(uploadDir);
-    
+
     if (!realPath.startsWith(realUploadDir)) {
       return res.status(400).json({ error: 'Acceso denegado' });
     }
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      res.json({ success: true, message: 'Imagen eliminada' });
-    } else {
-      res.status(404).json({ error: 'Archivo no encontrado' });
+    if (fs.existsSync(realPath)) {
+      fs.unlinkSync(realPath);
+      return res.json({ success: true, message: 'Archivo eliminado' });
     }
+
+    res.status(404).json({ error: 'Archivo no encontrado' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-module.exports = { upload, ...exports };
+module.exports = {
+  upload,
+  uploadProductFile,
+  uploadProductImage: uploadProductFile,
+  deleteProductFile,
+  deleteProductImage: deleteProductFile
+};

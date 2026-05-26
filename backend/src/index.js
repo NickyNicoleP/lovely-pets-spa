@@ -6,6 +6,7 @@ require('dotenv').config();
 const http = require('http');
 const { initIo } = require('./socket');
 const { forceHTTPS, securityHeaders } = require('./utils/httpsConfig');
+const { sanitizeResponse } = require('./utils/xssSanitizer');
 const authRoutes = require('./routes/auth');
 const usuarioRoutes = require('./routes/usuarios');
 const clienteRoutes = require('./routes/clientes');
@@ -45,6 +46,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(sanitizeResponse());
 
 // ✅ SEGURIDAD: Middleware para inyectar CSRF token
 app.use(injectCSRFToken);

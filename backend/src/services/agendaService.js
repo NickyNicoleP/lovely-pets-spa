@@ -2,7 +2,7 @@ const pool = require('../config/database');
 const authService = require('./authService');
 
 class AgendaService {
-  async getAll(filters = {}) {
+  async getAll(filters = {}, userId, userRole) {
     let query = `
       SELECT a.id,
              a.groomer_id,
@@ -16,7 +16,6 @@ class AgendaService {
              m.especie as mascota_especie,
              m.raza as mascota_raza,
              c.id as cliente_id,
-             u.id as cliente_usuario_id,
              u.id as cliente_usuario_id,
              u.nombre as cliente_nombre,
              u.apellido as cliente_apellido,
@@ -44,9 +43,17 @@ class AgendaService {
       params.push(filters.estado);
     }
 
-    if (filters.cliente_id) {
+    if (filters.cliente_id && userRole === 'admin') {
       query += ' AND c.id = ?';
       params.push(filters.cliente_id);
+    }
+
+    if (userRole === 'cliente') {
+      query += ' AND u.id = ?';
+      params.push(userId);
+    } else if (userRole === 'groomer') {
+      query += ' AND a.groomer_id = ?';
+      params.push(userId);
     }
 
     query += ' ORDER BY a.fecha_hora';
@@ -55,7 +62,7 @@ class AgendaService {
     return agenda;
   }
 
-  async getById(id) {
+  async getById(id, userId, userRole) {
     const [agenda] = await pool.execute(
       `SELECT a.id,
               a.groomer_id,
@@ -69,6 +76,7 @@ class AgendaService {
               m.especie as mascota_especie,
               m.raza as mascota_raza,
               c.id as cliente_id,
+              u.id as cliente_usuario_id,
               u.nombre as cliente_nombre,
               u.apellido as cliente_apellido,
               s.id as servicio_id,
@@ -88,27 +96,38 @@ class AgendaService {
       throw new Error('Reserva no encontrada');
     }
 
-    return agenda[0];
+    const reserva = agenda[0];
+    if (userRole === 'cliente' && reserva.cliente_usuario_id !== userId) {
+      throw new Error('No autorizado para ver esta reserva');
+    }
+    if (userRole === 'groomer' && reserva.groomer_id !== userId) {
+      throw new Error('No autorizado para ver esta reserva');
+    }
+
+    return reserva;
   }
 
-  async create(reservaData, userId) {
+  async create(reservaData, userId, userRole) {
     const { mascota_id, servicio_id, groomer_id, fecha, hora, observaciones, precio_final } = reservaData;
 
     if (!mascota_id || !servicio_id || !fecha || !hora) {
       throw new Error('Datos incompletos para crear la reserva');
     }
 
-    const [servicios] = await pool.execute(
-      'SELECT duracion_min, precio_base, tiempo_limpieza_min FROM SERVICIO WHERE id = ?',
-      [servicio_id]
-    );
+    if (userRole === 'cliente') {
+      const [mascotaRows] = await pool.execute(
+        `SELECT c.usuario_id FROM MASCOTA m
+         JOIN CLIENTE c ON m.cliente_id = c.id
+         WHERE m.id = ?`,
+        [mascota_id]
+      );
 
-    if (servicios.length === 0) {
-      throw new Error('Servicio no encontrado');
+      if (mascotaRows.length === 0 || mascotaRows[0].usuario_id !== userId) {
+        throw new Error('No puede reservar para esta mascota');
+      }
     }
 
-    const { duracion_min, precio_base, tiempo_limpieza_min } = servicios[0];
-    const duracionTotal = duracion_min + (tiempo_limpieza_min || 0);
+    const { duracionTotal, precioBase, ajusteRazaPct } = await this.calculateAdjustedServiceData(servicio_id, mascota_id);
 
     const fechaHoraInicio = new Date(`${fecha}T${hora}`);
     if (Number.isNaN(fechaHoraInicio.getTime())) {
@@ -119,9 +138,10 @@ class AgendaService {
     const startDate = fechaHoraInicio.toISOString().slice(0, 19).replace('T', ' ');
     const endDate = fechaHoraFin.toISOString().slice(0, 19).replace('T', ' ');
 
+    const computedPrecioFinal = Number((precioBase * (1 + ajusteRazaPct / 100)).toFixed(2));
     const precioFinal = precio_final != null && !Number.isNaN(Number(precio_final))
       ? Number(precio_final)
-      : precio_base;
+      : computedPrecioFinal;
 
     let asignadoGroomerId = null;
     if (groomer_id) {
@@ -193,14 +213,12 @@ class AgendaService {
     if (fecha || hora) {
       const newFecha = fecha || reservaAnterior.fecha;
       const newHora = hora || reservaAnterior.hora;
-      const [servicios] = await pool.execute('SELECT duracion_min, tiempo_limpieza_min FROM SERVICIO WHERE id = ?', [reservaAnterior.servicio_id]);
-      if (servicios.length === 0) {
-        throw new Error('Servicio no encontrado');
-      }
-      const { duracion_min, tiempo_limpieza_min } = servicios[0];
-      const duracionTotal = duracion_min + (tiempo_limpieza_min || 0);
+      const adjusted = await this.calculateAdjustedServiceData(reservaAnterior.servicio_id, reservaAnterior.mascota_id);
       const fechaHoraInicio = new Date(`${newFecha}T${newHora}`);
-      const fechaHoraFin = new Date(fechaHoraInicio.getTime() + duracionTotal * 60000);
+      if (Number.isNaN(fechaHoraInicio.getTime())) {
+        throw new Error('Fecha u hora inválidas');
+      }
+      const fechaHoraFin = new Date(fechaHoraInicio.getTime() + adjusted.duracionTotal * 60000);
       const startDate = fechaHoraInicio.toISOString().slice(0, 19).replace('T', ' ');
       const endDate = fechaHoraFin.toISOString().slice(0, 19).replace('T', ' ');
 
@@ -226,18 +244,162 @@ class AgendaService {
     return this.getById(id);
   }
 
-  async delete(id, userId) {
-    const reserva = await this.getById(id);
-    await pool.execute('DELETE FROM SLOT_RESERVA WHERE id = ?', [id]);
-    await authService.registrarAudit(userId, null, null, null, 'eliminar_reserva', reserva);
-    return { message: 'Reserva eliminada correctamente' };
+  normalizeDateValue(value) {
+    if (value instanceof Date) {
+      return value;
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return parsed;
   }
 
-  async checkAvailability(fechaHoraInicio, fechaHoraFin, groomerId = null, excludeId = null) {
-    const params = [fechaHoraInicio, fechaHoraFin];
+  async calculateAdjustedServiceData(servicioId, mascotaId) {
+    const [servicios] = await pool.execute(
+      'SELECT duracion_min, tiempo_limpieza_min, precio_base, ajuste_raza_pct FROM SERVICIO WHERE id = ?',
+      [servicioId]
+    );
+
+    if (servicios.length === 0) {
+      throw new Error('Servicio no encontrado');
+    }
+
+    const [mascotas] = await pool.execute(
+      'SELECT raza, peso, temperamento FROM MASCOTA WHERE id = ?',
+      [mascotaId]
+    );
+
+    if (mascotas.length === 0) {
+      throw new Error('Mascota no encontrada');
+    }
+
+    const { duracion_min, tiempo_limpieza_min, precio_base, ajuste_raza_pct } = servicios[0];
+    const { raza, peso, temperamento } = mascotas[0];
+
+    let duracionExtra = 0;
+    const pesoNumero = Number(peso);
+    if (!Number.isNaN(pesoNumero) && pesoNumero >= 20) {
+      duracionExtra += 15;
+    }
+
+    const temperamentoTexto = String(temperamento || '').toLowerCase();
+    if (temperamentoTexto.match(/\b(ansioso|nervioso|temeroso|miedoso|agresivo|hiperactivo)\b/)) {
+      duracionExtra += 10;
+    }
+
+    let ajusteRazaPctActual = Number(ajuste_raza_pct || 0);
+    if (raza) {
+      const [ajustes] = await pool.execute(
+        'SELECT porcentaje_extra FROM RAZA_AJUSTE WHERE servicio_id = ? AND raza_nombre = ?',
+        [servicioId, raza]
+      );
+      if (ajustes.length > 0) {
+        ajusteRazaPctActual += Number(ajustes[0].porcentaje_extra || 0);
+      }
+    }
+
+    return {
+      duracionMin: Number(duracion_min || 0),
+      tiempoLimpiezaMin: Number(tiempo_limpieza_min || 0),
+      duracionTotal: Number(duracion_min || 0) + Number(tiempo_limpieza_min || 0) + duracionExtra,
+      precioBase: Number(precio_base || 0),
+      ajusteRazaPct: ajusteRazaPctActual
+    };
+  }
+
+  parseDisponibilidadSemanal(disponibilidad) {
+    if (!disponibilidad) {
+      return null;
+    }
+
+    if (typeof disponibilidad === 'string') {
+      try {
+        return JSON.parse(disponibilidad);
+      } catch {
+        return null;
+      }
+    }
+
+    return disponibilidad;
+  }
+
+  intervalsOverlap(startA, endA, startB, endB) {
+    return !(endA <= startB || startA >= endB);
+  }
+
+  isWithinWeeklyAvailability(fechaHoraInicio, fechaHoraFin, disponibilidadSemanal) {
+    if (!disponibilidadSemanal) {
+      return true;
+    }
+
+    const diasSemana = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const diaClave = diasSemana[fechaHoraInicio.getDay()];
+    const diaConfig = disponibilidadSemanal[diaClave];
+
+    if (!diaConfig || diaConfig.activo === false) {
+      return false;
+    }
+
+    if (!diaConfig.inicio || !diaConfig.fin) {
+      return true;
+    }
+
+    if (fechaHoraInicio.toDateString() !== fechaHoraFin.toDateString()) {
+      return false;
+    }
+
+    const [inicioH, inicioM] = diaConfig.inicio.split(':').map(Number);
+    const [finH, finM] = diaConfig.fin.split(':').map(Number);
+    const startMinutes = fechaHoraInicio.getHours() * 60 + fechaHoraInicio.getMinutes();
+    const endMinutes = fechaHoraFin.getHours() * 60 + fechaHoraFin.getMinutes();
+    const windowStart = inicioH * 60 + inicioM;
+    const windowEnd = finH * 60 + finM;
+
+    return startMinutes >= windowStart && endMinutes <= windowEnd;
+  }
+
+  async hasBlockingInterval(groomerId, fechaHoraInicio, fechaHoraFin) {
+    const [bloqueos] = await pool.execute(
+      `SELECT id FROM BLOQUEO_AGENDA
+       WHERE groomer_id = ?
+         AND NOT (fecha_fin <= ? OR fecha_inicio >= ?)`,
+      [groomerId, fechaHoraInicio, fechaHoraFin]
+    );
+
+    return bloqueos.length > 0;
+  }
+
+  async isGroomerAvailableForInterval(fechaHoraInicio, fechaHoraFin, groomerId, excludeId = null) {
+    const fechaInicio = this.normalizeDateValue(fechaHoraInicio);
+    const fechaFin = this.normalizeDateValue(fechaHoraFin);
+    if (!fechaInicio || !fechaFin) {
+      throw new Error('Fechas inválidas para disponibilidad');
+    }
+
+    const [groomerRows] = await pool.execute(
+      'SELECT id, disponibilidad_semanal FROM GROOMER WHERE id = ? AND activo = TRUE',
+      [groomerId]
+    );
+
+    if (groomerRows.length === 0) {
+      return false;
+    }
+
+    const disponibilidad = this.parseDisponibilidadSemanal(groomerRows[0].disponibilidad_semanal);
+    if (!this.isWithinWeeklyAvailability(fechaInicio, fechaFin, disponibilidad)) {
+      return false;
+    }
+
+    if (await this.hasBlockingInterval(groomerId, fechaInicio, fechaFin)) {
+      return false;
+    }
+
+    const params = [groomerId, fechaInicio, fechaFin];
     let query = `
-      SELECT groomer_id FROM SLOT_RESERVA
-      WHERE NOT (fecha_hora_fin <= ? OR fecha_hora >= ?)
+      SELECT id FROM SLOT_RESERVA
+      WHERE groomer_id = ?
+        AND NOT (fecha_hora_fin <= ? OR fecha_hora >= ?)
     `;
 
     if (excludeId) {
@@ -245,23 +407,36 @@ class AgendaService {
       params.push(excludeId);
     }
 
-    if (groomerId) {
-      query += ' AND groomer_id = ?';
-      params.push(groomerId);
+    const [reservas] = await pool.execute(query, params);
+    return reservas.length === 0;
+  }
+
+  async checkAvailability(fechaHoraInicio, fechaHoraFin, groomerId = null, excludeId = null) {
+    const fechaInicio = this.normalizeDateValue(fechaHoraInicio);
+    const fechaFin = this.normalizeDateValue(fechaHoraFin);
+    if (!fechaInicio || !fechaFin) {
+      throw new Error('Fechas inválidas para disponibilidad');
     }
 
-    const [result] = await pool.execute(query, params);
-
     if (groomerId) {
-      return result.length === 0;
+      return this.isGroomerAvailableForInterval(fechaInicio, fechaFin, groomerId, excludeId);
     }
 
     const [groomers] = await pool.execute('SELECT id FROM GROOMER WHERE activo = TRUE');
-    const busyGroomerIds = new Set(result.map((row) => row.groomer_id));
-    return groomers.some((groomer) => !busyGroomerIds.has(groomer.id));
+    for (const groomer of groomers) {
+      if (await this.isGroomerAvailableForInterval(fechaInicio, fechaFin, groomer.id, excludeId)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
-  async getHorariosDisponibles(fecha, servicioId, groomerId = null) {
+  async getHorariosDisponibles(fecha, servicioId, groomerId = null, mascotaId = null) {
+    if (!fecha || !servicioId) {
+      throw new Error('Fecha y servicio son requeridos');
+    }
+
     const [servicios] = await pool.execute(
       'SELECT duracion_min, tiempo_limpieza_min FROM SERVICIO WHERE id = ?',
       [servicioId]
@@ -272,56 +447,91 @@ class AgendaService {
     }
 
     const { duracion_min, tiempo_limpieza_min } = servicios[0];
-    const duracionTotal = duracion_min + (tiempo_limpieza_min || 0);
+    let duracionTotal = duracion_min + (tiempo_limpieza_min || 0);
+    if (mascotaId) {
+      const adjusted = await this.calculateAdjustedServiceData(servicioId, mascotaId);
+      duracionTotal = adjusted.duracionTotal;
+    }
+
+    const groomerFilter = groomerId ? 'AND g.id = ?' : '';
+    const groomerParams = groomerId ? [groomerId] : [];
+    const [groomers] = await pool.execute(
+      `SELECT g.id, g.disponibilidad_semanal FROM GROOMER g WHERE g.activo = TRUE ${groomerFilter}`,
+      groomerParams
+    );
+
+    if (groomers.length === 0) {
+      return [];
+    }
+
+    const groomerData = groomers.map((g) => ({
+      id: g.id,
+      disponibilidad_semanal: this.parseDisponibilidadSemanal(g.disponibilidad_semanal)
+    }));
+
+    const [reservas] = await pool.execute(
+      `SELECT fecha_hora, fecha_hora_fin, groomer_id FROM SLOT_RESERVA
+       WHERE DATE(fecha_hora) = ? AND estado != 'cancelada'`,
+      [fecha]
+    );
+
+    const [bloqueos] = await pool.execute(
+      `SELECT groomer_id, fecha_inicio, fecha_fin FROM BLOQUEO_AGENDA
+       WHERE NOT (fecha_fin <= ? OR fecha_inicio >= ?)`,
+      [`${fecha} 00:00:00`, `${fecha} 23:59:59`]
+    );
+
+    const reservasPorGroomer = groomerData.reduce((acc, groomer) => {
+      acc[groomer.id] = [];
+      return acc;
+    }, {});
+    reservas.forEach((reserva) => {
+      if (reservasPorGroomer[reserva.groomer_id]) {
+        reservasPorGroomer[reserva.groomer_id].push(reserva);
+      }
+    });
+
+    const bloqueosPorGroomer = groomerData.reduce((acc, groomer) => {
+      acc[groomer.id] = [];
+      return acc;
+    }, {});
+    bloqueos.forEach((bloqueo) => {
+      if (bloqueosPorGroomer[bloqueo.groomer_id]) {
+        bloqueosPorGroomer[bloqueo.groomer_id].push(bloqueo);
+      }
+    });
 
     const horarios = [];
     const horaApertura = 9;
     const horaCierre = 18;
+    const ultimaSalida = new Date(`${fecha}T${horaCierre.toString().padStart(2, '0')}:00:00`);
 
-    const groomerFilter = groomerId ? 'AND groomer_id = ?' : '';
-    const queryParams = groomerId ? [fecha, groomerId] : [fecha];
-    const [reservas] = await pool.execute(
-      `SELECT fecha_hora, fecha_hora_fin, groomer_id FROM SLOT_RESERVA
-       WHERE DATE(fecha_hora) = ? AND estado != 'cancelada' ${groomerFilter}`,
-      queryParams
-    );
-
-    const [groomers] = await pool.execute('SELECT id FROM GROOMER WHERE activo = TRUE');
-    const groomerCount = groomers.length;
-    if (groomerCount === 0) {
-      return [];
-    }
-
-    const reservasPorGroomer = groomers.reduce((acc, groomer) => {
-      acc[groomer.id] = [];
-      return acc;
-    }, {});
-
-    reservas.forEach((reserva) => {
-      const id = reserva.groomer_id;
-      if (!reservasPorGroomer[id]) {
-        reservasPorGroomer[id] = [];
+    const isGroomerFree = (groomer, inicio, fin) => {
+      if (!this.isWithinWeeklyAvailability(inicio, fin, groomer.disponibilidad_semanal)) {
+        return false;
       }
-      reservasPorGroomer[id].push(reserva);
-    });
+
+      if (bloqueosPorGroomer[groomer.id]?.some((bloqueo) => this.intervalsOverlap(new Date(bloqueo.fecha_inicio), new Date(bloqueo.fecha_fin), inicio, fin))) {
+        return false;
+      }
+
+      if (reservasPorGroomer[groomer.id]?.some((reserva) => this.intervalsOverlap(new Date(reserva.fecha_hora), new Date(reserva.fecha_hora_fin), inicio, fin))) {
+        return false;
+      }
+
+      return true;
+    };
 
     for (let hora = horaApertura; hora < horaCierre; hora++) {
       for (let minuto = 0; minuto < 60; minuto += 30) {
         const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}:00`;
-        const intentoInicio = new Date(`${fecha}T${horaStr}`);
-        const intentoFin = new Date(intentoInicio.getTime() + duracionTotal * 60000);
-
-        if (intentoFin.getHours() > horaCierre || (intentoFin.getHours() === horaCierre && intentoFin.getMinutes() > 0)) {
+        const inicio = new Date(`${fecha}T${horaStr}`);
+        const fin = new Date(inicio.getTime() + duracionTotal * 60000);
+        if (fin > ultimaSalida) {
           continue;
         }
 
-        const slotDisponible = groomerId
-          ? !reservas.some((reserva) => reserva.groomer_id === Number(groomerId) && intentoInicio < new Date(reserva.fecha_hora_fin) && intentoFin > new Date(reserva.fecha_hora))
-          : Object.values(reservasPorGroomer).some((lista) =>
-              !lista.some((reserva) => intentoInicio < new Date(reserva.fecha_hora_fin) && intentoFin > new Date(reserva.fecha_hora))
-            );
-
-        if (slotDisponible) {
+        if (groomerData.some((groomer) => isGroomerFree(groomer, inicio, fin))) {
           horarios.push(horaStr);
         }
       }

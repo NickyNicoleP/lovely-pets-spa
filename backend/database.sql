@@ -45,7 +45,7 @@ CREATE TABLE USUARIO (
     apellido VARCHAR(80) NOT NULL,
     email VARCHAR(120) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    rol ENUM('admin', 'empleado', 'veterinario', 'cliente') NOT NULL,
+    rol ENUM('admin', 'administrador', 'empleado', 'veterinario', 'cliente', 'groomer') NOT NULL,
     telefono VARCHAR(20),
     ci VARCHAR(20),
     direccion TEXT,

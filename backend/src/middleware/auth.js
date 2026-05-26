@@ -2,6 +2,12 @@ const jwt = require('jsonwebtoken');
 const pool = require('../config/database');
 require('dotenv').config();
 
+const normalizeRole = (role) => {
+  if (!role || typeof role !== 'string') return role;
+  if (role === 'administrador') return 'admin';
+  return role;
+};
+
 /**
  * Middleware: Valida JWT y extrae información del usuario
  */
@@ -43,7 +49,8 @@ const requireRole = (rolesArray) => {
     }
     
     const allowedRoles = Array.isArray(rolesArray) ? rolesArray : [rolesArray];
-    const allowed = allowedRoles.includes(req.user.rol);
+    const userRole = normalizeRole(req.user.rol);
+    const allowed = allowedRoles.includes(userRole);
     
     if (!allowed) {
       console.warn(`[RBAC] Usuario ${req.user.id} (rol: ${req.user.rol}) intentó acceder sin permisos. Requerido: ${allowedRoles.join(', ')}`);
@@ -71,7 +78,7 @@ const validateOwnershipOrAdmin = (resourceType, paramName = 'id') => {
     }
 
     // Admin tiene acceso a todo
-    if (req.user.rol === 'admin') {
+    if (normalizeRole(req.user.rol) === 'admin') {
       return next();
     }
 

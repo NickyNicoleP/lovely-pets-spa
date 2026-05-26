@@ -69,7 +69,7 @@ DB_NAME=pawspa_db
 DB_CHARSET=utf8mb4_unicode_ci
 
 # Frontend
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5174
 
 # Servidor
 NODE_ENV=development
@@ -113,7 +113,7 @@ npm run dev
 cd frontend
 npm run dev
 ```
-**URL**: `http://localhost:5173`
+**URL**: `http://localhost:5174`
 
 ---
 

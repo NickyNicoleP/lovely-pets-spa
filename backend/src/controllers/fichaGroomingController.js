@@ -81,7 +81,8 @@ exports.close = async (req, res) => {
 
     res.json(ficha);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    const status = error.statusCode === 'CHECKLIST_INCOMPLETE' ? 422 : 400;
+    res.status(status).json({ error: error.message });
   }
 };
 

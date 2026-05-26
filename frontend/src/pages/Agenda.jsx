@@ -179,7 +179,14 @@ export default function Agenda() {
 
   const loadHorarios = async () => {
     try {
-      const response = await agendaAPI.getHorarios({ fecha: selectedDate, servicio_id: formData.servicio_id });
+      const params = {
+        fecha: selectedDate,
+        servicio_id: formData.servicio_id
+      };
+      if (formData.mascota_id) {
+        params.mascota_id = formData.mascota_id;
+      }
+      const response = await agendaAPI.getHorarios(params);
       setHorariosDisponibles(response.data);
     } catch (error) {
       console.error('Error al cargar horarios:', error);

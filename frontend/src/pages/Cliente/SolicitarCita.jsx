@@ -34,7 +34,15 @@ export default function SolicitarCita() {
   const verificarDisponibilidad = async () => {
     if (!selectedGroomer || !selectedServicio || !fecha) return;
     try {
-      const { data } = await agendaAPI.getHorarios({ groomer_id: selectedGroomer, servicio_id: selectedServicio, fecha });
+      const params = {
+        groomer_id: selectedGroomer,
+        servicio_id: selectedServicio,
+        fecha
+      };
+      if (selectedMascota) {
+        params.mascota_id = selectedMascota;
+      }
+      const { data } = await agendaAPI.getHorarios(params);
       setHorariosDisponibles(data);
     } catch (error) {
       console.error(error);
@@ -43,7 +51,7 @@ export default function SolicitarCita() {
 
   useEffect(() => {
     if (selectedGroomer && selectedServicio && fecha) verificarDisponibilidad();
-  }, [selectedGroomer, selectedServicio, fecha]);
+  }, [selectedGroomer, selectedServicio, fecha, selectedMascota]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

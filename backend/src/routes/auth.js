@@ -11,6 +11,7 @@ router.post('/verify-2fa', authController.verify2FA);
 router.post('/refresh', authController.refresh);
 router.get('/verify-email/:token', authController.verifyEmail);
 router.post('/resend-verification', authController.resendVerification);
+router.post('/reenviar-verificacion', authController.resendVerification);
 router.get('/captcha', authController.getCaptcha);
 
 // Rutas protegidas
@@ -27,6 +28,7 @@ router.post('/2fa/disable', authenticateToken, authController.disable2FA);
 // Rutas de admin
 router.get('/users', authenticateToken, requireRole(['admin']), authController.getAllUsers);
 router.post('/users', authenticateToken, requireRole(['admin']), authController.createUserByAdmin);
+router.post('/users/:id/verify-email', authenticateToken, requireRole(['admin']), authController.manualVerifyEmail);
 router.put('/users/:id/role', authenticateToken, requireRole(['admin']), authController.updateUserRole);
 router.put('/users/:id/status', authenticateToken, requireRole(['admin']), authController.updateUserStatus);
 router.delete('/users/:id', authenticateToken, requireRole(['admin']), authController.deleteUser);

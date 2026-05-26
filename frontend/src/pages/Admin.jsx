@@ -26,7 +26,7 @@ export default function Admin() {
   const [formLoading, setFormLoading] = useState(false);
 
   // Verificar que sea admin
-  if (user && user.rol !== 'admin') {
+  if (user && user.rol !== 'admin' && user.rol !== 'administrador') {
     return <Navigate to="/" />;
   }
 
@@ -123,6 +123,7 @@ export default function Admin() {
 
   const roleLabels = {
     'admin': 'Administrador',
+    'administrador': 'Administrador',
     'veterinario': 'Veterinario',
     'empleado': 'Empleado',
     'groomer': 'Groomer',

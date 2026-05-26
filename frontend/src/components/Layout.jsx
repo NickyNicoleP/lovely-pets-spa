@@ -22,7 +22,9 @@ export default function Layout() {
     { path: '/productos', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', label: 'Productos' },
     { path: '/carrito', icon: 'M3 3h18v2H3V3zm0 6h18v2H3V9zm0 6h18v2H3v-2zm0 6h18v2H3v-2z', label: 'Tienda' },
     { path: '/notificaciones', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1h6z', label: 'Notificaciones' },
-    ...(user?.rol === 'admin' ? [{ path: '/admin', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', label: 'Admin' }] : [])
+    ...(user?.rol === 'admin' || user?.rol === 'administrador'
+      ? [{ path: '/admin', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', label: 'Admin' }]
+      : [])
   ];
 
   const { toastMessages, removeToast } = useSocket();

@@ -27,7 +27,8 @@ function AdminRoute({ children }) {
     );
   }
   
-  return user && user.rol === 'admin' ? children : <Navigate to="/" />;
+  const isAdmin = user && (user.rol === 'admin' || user.rol === 'administrador');
+  return isAdmin ? children : <Navigate to="/" />;
 }
 
 function PrivateRoute({ children }) {

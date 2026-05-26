@@ -79,6 +79,8 @@ Sistema robusto de autenticación con JWT, 2FA, verificación de email, bloqueo 
 ### 3. Reenvío de Verificación
 **Endpoint:** `POST /api/auth/resend-verification`
 
+**Alias:** `POST /api/auth/reenviar-verificacion`
+
 **Request:**
 ```json
 {
@@ -92,6 +94,29 @@ Sistema robusto de autenticación con JWT, 2FA, verificación de email, bloqueo 
   "message": "Token de verificación reenviado",
   "verificationUrl": "/api/auth/verify-email/nuevo-token"
 }
+```
+
+---
+
+### 3.1 Verificación manual (admin)
+**Endpoint:** `POST /api/auth/users/:id/verify-email`
+
+**Descripción:** Permite a un administrador marcar `email_verificado = true` cuando SMTP no está disponible.
+
+**Response (200):**
+```json
+{
+  "message": "Email marcado como verificado manualmente",
+  "user": {
+    "message": "Email verificado manualmente",
+    "userId": 1
+  }
+}
+```
+
+**Verificación directa en la base de datos:**
+```sql
+UPDATE USUARIO SET email_verificado = TRUE WHERE id = 1;
 ```
 
 ---

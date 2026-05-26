@@ -7,7 +7,7 @@ USE pawspa_db;
 
 -- Asegurar valores de rol y tablas necesarias en caso de esquema parcial
 ALTER TABLE USUARIO
-  MODIFY COLUMN rol ENUM('admin', 'empleado', 'veterinario', 'cliente') NOT NULL;
+  MODIFY COLUMN rol ENUM('admin', 'administrador', 'empleado', 'veterinario', 'cliente', 'groomer') NOT NULL;
 
 CREATE TABLE IF NOT EXISTS VETERINARIO (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS BLOQUEO_AGENDA (
 DELETE FROM auditoria_log;
 
 -- 2. LIMPIAR USUARIOS DE PRUEBA (mantener admin)
-DELETE FROM USUARIO WHERE email != 'admin@pawspa.com' AND rol != 'admin';
-DELETE FROM CLIENTE WHERE usuario_id NOT IN (SELECT id FROM USUARIO WHERE rol = 'admin');
+DELETE FROM USUARIO WHERE email != 'admin@pawspa.com' AND rol NOT IN ('admin', 'administrador');
+DELETE FROM CLIENTE WHERE usuario_id NOT IN (SELECT id FROM USUARIO WHERE rol IN ('admin', 'administrador'));
 DELETE FROM GROOMER WHERE usuario_id NOT IN (SELECT id FROM USUARIO WHERE rol = 'empleado');
 DELETE FROM VETERINARIO WHERE usuario_id NOT IN (SELECT id FROM USUARIO WHERE rol = 'veterinario');
 

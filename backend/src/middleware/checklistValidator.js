@@ -10,95 +10,85 @@ const pool = require('../config/database');
  */
 const REQUIRED_CHECKLIST_ITEMS = [
   {
-    id: 'baño',
+    id: 'Baño',
     nombre: 'Baño',
     descripcion: 'Baño completado',
     required: true
   },
   {
-    id: 'secado',
+    id: 'Secado',
     nombre: 'Secado',
     descripcion: 'Secado completado',
     required: true
   },
   {
-    id: 'corte',
+    id: 'Corte',
     nombre: 'Corte',
     descripcion: 'Corte completado (si aplica)',
     required: true
   },
   {
-    id: 'limpieza_oidos',
+    id: 'Limpieza de Oídos',
     nombre: 'Limpieza de Oídos',
     descripcion: 'Oídos limpios',
     required: true
   },
   {
-    id: 'corte_unas',
+    id: 'Corte de Uñas',
     nombre: 'Corte de Uñas',
     descripcion: 'Uñas cortadas',
     required: true
   },
   {
-    id: 'foto_antes',
+    id: 'Foto Antes',
     nombre: 'Foto Antes',
     descripcion: 'Foto del estado inicial',
     required: true
   },
   {
-    id: 'foto_despues',
+    id: 'Foto Después',
     nombre: 'Foto Después',
     descripcion: 'Foto del resultado final',
     required: true
   },
   {
-    id: 'notas_groomer',
+    id: 'Notas del Groomer',
     nombre: 'Notas del Groomer',
     descripcion: 'Observaciones y notas completadas',
     required: true
   },
   {
-    id: 'firma_cliente',
+    id: 'Firma/Aprobación del Cliente',
     nombre: 'Firma/Aprobación del Cliente',
     descripcion: 'Cliente ha revisado y aprobado',
     required: true
   }
 ];
 
-/**
- * Obtiene el checklist de una ficha de grooming
- */
 async function getChecklistByFichaId(fichaId) {
   const [rows] = await pool.execute(
-    `SELECT * FROM FICHA_GROOMING_CHECKLIST WHERE ficha_grooming_id = ? ORDER BY created_at`,
+    `SELECT * FROM CHECKLIST_ITEM WHERE ficha_id = ? ORDER BY id`,
     [fichaId]
   );
   return rows || [];
 }
 
-/**
- * Valida que todos los ítems obligatorios estén completados
- * @param {number} fichaId - ID de la ficha de grooming
- * @returns {object} { isValid: boolean, missingItems: array, checklist: array }
- */
+function normalizeChecklistName(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
 async function validateChecklistCompletion(fichaId) {
   const checklist = await getChecklistByFichaId(fichaId);
-  
-  const missingItems = [];
-  const completedItems = {};
+  const completedItems = new Set();
 
-  // Mapear ítems completados
-  checklist.forEach(item => {
-    if (item.completed) {
-      completedItems[item.item_key] = true;
+  checklist.forEach((item) => {
+    if (item.realizado) {
+      completedItems.add(normalizeChecklistName(item.nombre));
     }
   });
 
-  // Verificar ítems obligatorios
-  REQUIRED_CHECKLIST_ITEMS.forEach(requiredItem => {
-    if (requiredItem.required && !completedItems[requiredItem.id]) {
-      missingItems.push(requiredItem);
-    }
+  const missingItems = REQUIRED_CHECKLIST_ITEMS.filter((requiredItem) => {
+    return requiredItem.required && !completedItems.has(normalizeChecklistName(requiredItem.nombre));
   });
 
   return {
@@ -106,13 +96,10 @@ async function validateChecklistCompletion(fichaId) {
     missingItems,
     checklist,
     totalRequired: REQUIRED_CHECKLIST_ITEMS.length,
-    totalCompleted: checklist.filter(c => c.completed).length
+    totalCompleted: checklist.filter((c) => c.realizado).length
   };
 }
 
-/**
- * Middleware: Valida checklist antes de cerrar ficha
- */
 const validateChecklistBeforeClose = async (req, res, next) => {
   const fichaId = req.params.id;
 
@@ -124,15 +111,14 @@ const validateChecklistBeforeClose = async (req, res, next) => {
     const validation = await validateChecklistCompletion(fichaId);
 
     if (!validation.isValid) {
-      return res.status(400).json({
-        error: 'No se puede cerrar la ficha. Ítems del checklist pendientes:',
+      return res.status(422).json({
+        error: 'No se puede cerrar la ficha. Ítems del checklist pendientes.',
         missingItems: validation.missingItems,
         completed: `${validation.totalCompleted}/${validation.totalRequired}`,
         statusCode: 'CHECKLIST_INCOMPLETE'
       });
     }
 
-    // Pasar resultado de validación al siguiente middleware
     req.checklistValidation = validation;
     next();
   } catch (error) {
@@ -141,41 +127,29 @@ const validateChecklistBeforeClose = async (req, res, next) => {
   }
 };
 
-/**
- * Agrega ítem al checklist de una ficha
- */
-async function addChecklistItem(fichaId, itemKey, itemNombre, completed = false) {
+async function addChecklistItem(fichaId, nombre, realizado = false, observacion = null) {
   const [result] = await pool.execute(
-    `INSERT INTO FICHA_GROOMING_CHECKLIST (ficha_grooming_id, item_key, item_nombre, completed, created_at)
-     VALUES (?, ?, ?, ?, NOW())`,
-    [fichaId, itemKey, itemNombre, completed ? 1 : 0]
+    `INSERT INTO CHECKLIST_ITEM (ficha_id, nombre, realizado, observacion) VALUES (?, ?, ?, ?)`,
+    [fichaId, nombre, realizado ? 1 : 0, observacion]
   );
   return result;
 }
 
-/**
- * Actualiza estado de ítem del checklist
- */
-async function updateChecklistItem(fichaId, itemKey, completed) {
+async function updateChecklistItem(fichaId, nombre, realizado) {
   const [result] = await pool.execute(
-    `UPDATE FICHA_GROOMING_CHECKLIST 
-     SET completed = ?, updated_at = NOW()
-     WHERE ficha_grooming_id = ? AND item_key = ?`,
-    [completed ? 1 : 0, fichaId, itemKey]
+    `UPDATE CHECKLIST_ITEM SET realizado = ?, observacion = NULL WHERE ficha_id = ? AND nombre = ?`,
+    [realizado ? 1 : 0, fichaId, nombre]
   );
   return result;
 }
 
-/**
- * Obtiene resumen de estado del checklist
- */
 async function getChecklistSummary(fichaId) {
   const validation = await validateChecklistCompletion(fichaId);
   return {
     fichaId,
     totalItems: validation.totalRequired,
     completedItems: validation.totalCompleted,
-    percentage: Math.round((validation.totalCompleted / validation.totalRequired) * 100),
+    percentage: validation.totalRequired > 0 ? Math.round((validation.totalCompleted / validation.totalRequired) * 100) : 0,
     isComplete: validation.isValid,
     pendingItems: validation.missingItems
   };

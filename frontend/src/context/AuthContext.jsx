@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
     if (token) {
       try {
         const response = await api.get('/auth/profile');
-        setUser(response.data);
+        setUser(response.data?.user ?? response.data);
       } catch (error) {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
@@ -69,8 +69,9 @@ export function AuthProvider({ children }) {
 
   const updateProfile = async (userData) => {
     const response = await api.put('/auth/profile', userData);
-    setUser(response.data);
-    return response.data;
+    const updatedUser = response.data?.user ?? response.data;
+    setUser(updatedUser);
+    return updatedUser;
   };
 
   const changePassword = async (currentPassword, newPassword) => {
