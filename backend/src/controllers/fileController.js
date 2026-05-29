@@ -5,13 +5,26 @@ const crypto = require('crypto');
 const multer = require('multer');
 
 const uploadDir = path.join(__dirname, '../../uploads/productos');
+const uploadMascotaDir = path.join(__dirname, '../../uploads/mascotas');
+const uploadGroomingDir = path.join(__dirname, '../../uploads/grooming');
 
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+[uploadDir, uploadMascotaDir, uploadGroomingDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const safeName = path.parse(file.originalname).name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40);
+    const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+    cb(null, `${safeName}-${uniqueSuffix}${path.extname(file.originalname).toLowerCase()}`);
+  }
+});
+
+const storageMascota = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadMascotaDir),
   filename: (req, file, cb) => {
     const safeName = path.parse(file.originalname).name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40);
     const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
@@ -31,6 +44,31 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB máximo
+  }
+});
+
+const storageGrooming = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadGroomingDir),
+  filename: (req, file, cb) => {
+    const safeName = path.parse(file.originalname).name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40);
+    const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+    cb(null, `${safeName}-${uniqueSuffix}${path.extname(file.originalname).toLowerCase()}`);
+  }
+});
+
+const uploadMascota = multer({
+  storage: storageMascota,
+  fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB máximo
+  }
+});
+
+const uploadGrooming = multer({
+  storage: storageGrooming,
   fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB máximo
@@ -58,6 +96,30 @@ const uploadProductFile = [
     }
   }
 ];
+
+const uploadMascotaFile = [
+  uploadMascota.single('archivo'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No se proporcionó archivo' });
+      }
+
+      const filePath = `/uploads/mascotas/${req.file.filename}`;
+      res.json({
+        success: true,
+        filename: req.file.filename,
+        path: filePath,
+        size: req.file.size,
+        mimetype: req.file.mimetype
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+];
+
+const uploadFichaPhoto = uploadGrooming.single('archivo');
 
 const deleteProductFile = async (req, res) => {
   try {
@@ -89,6 +151,8 @@ module.exports = {
   upload,
   uploadProductFile,
   uploadProductImage: uploadProductFile,
+  uploadMascotaFile,
+  uploadFichaPhoto,
   deleteProductFile,
   deleteProductImage: deleteProductFile
 };

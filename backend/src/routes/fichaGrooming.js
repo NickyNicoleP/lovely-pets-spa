@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const fichaGroomingController = require('../controllers/fichaGroomingController');
+const fileController = require('../controllers/fileController');
 const { authenticateToken, requireRole, validateOwnershipOrAdmin } = require('../middleware/auth');
 const { validateChecklistBeforeClose } = require('../middleware/checklistValidator');
 
@@ -24,6 +25,18 @@ router.post('/', authenticateToken, requireRole(['admin', 'empleado', 'groomer']
 
 // ✅ SEGURIDAD: solo admin/empleado/groomer pueden agregar insumo
 router.post('/:id/insumo', authenticateToken, requireRole(['admin', 'empleado', 'groomer']), fichaGroomingController.addInsumo);
+
+// ✅ SEGURIDAD: Actualizar ficha (estado de ingreso, observaciones, checkboxes)
+router.put('/:id', authenticateToken, validateOwnershipOrAdmin('ficha_grooming', 'id'), requireRole(['admin', 'empleado', 'groomer']), fichaGroomingController.update);
+
+// ✅ SEGURIDAD: Subir foto antes/despues
+router.post('/:id/fotos',
+  authenticateToken,
+  validateOwnershipOrAdmin('ficha_grooming', 'id'),
+  requireRole(['admin', 'empleado', 'groomer']),
+  fileController.uploadFichaPhoto,
+  fichaGroomingController.uploadFoto
+);
 
 // ✅ SEGURIDAD: Cierre de ficha REQUIERE checklist completo
 router.post('/:id/cerrar', 

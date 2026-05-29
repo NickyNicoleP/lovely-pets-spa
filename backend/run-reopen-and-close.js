@@ -14,8 +14,8 @@ async function run() {
     await pool.execute('UPDATE FICHA_GROOMING SET fecha_cierre = NULL WHERE id = ?', [fichaId]);
 
     // Asegurar estado de la reserva relacionado a en_proceso
-    const [resRow] = await pool.execute('SELECT reserva_id FROM FICHA_GROOMING WHERE id = ?', [fichaId]);
-    const reservaId = resRow[0]?.reserva_id;
+    const [resRow] = await pool.execute('SELECT slot_id FROM FICHA_GROOMING WHERE id = ?', [fichaId]);
+    const reservaId = resRow[0]?.slot_id;
     if (reservaId) {
       await pool.execute('UPDATE SLOT_RESERVA SET estado = ? WHERE id = ?', ['en_proceso', reservaId]);
     }

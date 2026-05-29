@@ -4,10 +4,14 @@ import { SocketProvider } from './context/SocketContext';
 import SessionWarningModal from './components/SessionWarningModal';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AuthPage from './pages/AuthPage';
+import PawSpaLoginPage from './pages/PawSpaLoginPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import VerifyEmail from './pages/VerifyEmail';
 import Dashboard from './pages/Dashboard';
 import Agenda from './pages/Agenda';
 import Grooming from './pages/Grooming';
+import GroomingFicha from './pages/GroomingFicha';
 import Productos from './pages/Productos';
 import Carrito from './pages/Carrito';
 import Notificaciones from './pages/Notificaciones';
@@ -15,6 +19,7 @@ import Perfil from './pages/Perfil';
 import Setup2FA from './pages/Setup2FA';
 import Admin from './pages/Admin';
 import Layout from './components/Layout';
+import MascotaNueva from './pages/Cliente/MascotaNueva';
 
 function AdminRoute({ children }) {
   const { user, loading } = useAuth();
@@ -48,6 +53,9 @@ function PrivateRoute({ children }) {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/pawspa-login" element={<PawSpaLoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/auth" element={<AuthPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
@@ -59,6 +67,8 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="agenda" element={<Agenda />} />
         <Route path="grooming" element={<Grooming />} />
+        <Route path="grooming/ficha/:id" element={<GroomingFicha />} />
+        <Route path="mascotas/nueva" element={<MascotaNueva />} />
         <Route path="productos" element={<Productos />} />
         <Route path="carrito" element={<Carrito />} />
         <Route path="notificaciones" element={<Notificaciones />} />

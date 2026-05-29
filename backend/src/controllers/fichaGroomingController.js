@@ -47,6 +47,42 @@ exports.addInsumo = async (req, res) => {
   }
 };
 
+exports.update = async (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    const ficha = await fichaGroomingService.update(req.params.id, req.body, userId);
+    res.json(ficha);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.uploadFoto = async (req, res) => {
+  try {
+    const fichaId = req.params.id;
+    const { tipo } = req.body;
+
+    if (!['antes', 'despues'].includes(tipo)) {
+      return res.status(400).json({ error: 'Tipo de foto inválido. Debe ser antes o despues.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se proporcionó archivo' });
+    }
+
+    const url = `/uploads/grooming/${req.file.filename}`;
+    await pool.execute(
+      'INSERT INTO FOTO_SERVICIO (ficha_id, url, tipo) VALUES (?, ?, ?)',
+      [fichaId, url, tipo]
+    );
+
+    const ficha = await fichaGroomingService.getById(fichaId);
+    res.json({ url, tipo, ficha });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 exports.close = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
@@ -54,7 +90,7 @@ exports.close = async (req, res) => {
 
     const [usuarioRows] = await pool.execute(
       `SELECT u.id FROM FICHA_GROOMING fg
-       JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
+       JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
        JOIN MASCOTA m ON sr.mascota_id = m.id
        JOIN CLIENTE c ON m.cliente_id = c.id
        JOIN USUARIO u ON c.usuario_id = u.id

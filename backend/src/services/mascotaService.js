@@ -44,11 +44,25 @@ class MascotaService {
   }
 
   async create(mascotaData, userId) {
-    const { cliente_id, nombre, especie, raza, edad, peso, observaciones } = mascotaData;
+    const {
+      cliente_id,
+      nombre,
+      especie,
+      raza,
+      edad,
+      peso,
+      temperamento,
+      alergias,
+      restricciones_medicas,
+      vacunas,
+      foto_url
+    } = mascotaData;
+
+    const vacunasValue = vacunas ? JSON.stringify(vacunas) : null;
 
     const [result] = await pool.execute(
-      `INSERT INTO MASCOTA (cliente_id, nombre, especie, raza, edad, peso, temperamento, alergias, restricciones_medicas, foto_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO MASCOTA (cliente_id, nombre, especie, raza, edad, peso, temperamento, alergias, restricciones_medicas, vacunas, foto_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         cliente_id,
         nombre,
@@ -56,9 +70,11 @@ class MascotaService {
         raza,
         edad || null,
         peso || null,
-        observaciones || null,
-        null,
-        null
+        temperamento || null,
+        alergias || null,
+        restricciones_medicas || null,
+        vacunasValue,
+        foto_url || null
       ]
     );
 
@@ -68,12 +84,37 @@ class MascotaService {
 
   async update(id, mascotaData, userId) {
     const mascotaAnterior = await this.getById(id);
-    const { nombre, especie, raza, edad, peso, observaciones } = mascotaData;
+    const {
+      nombre,
+      especie,
+      raza,
+      edad,
+      peso,
+      temperamento,
+      alergias,
+      restricciones_medicas,
+      vacunas,
+      foto_url
+    } = mascotaData;
+
+    const vacunasValue = vacunas ? JSON.stringify(vacunas) : null;
 
     await pool.execute(
-      `UPDATE MASCOTA SET nombre = ?, especie = ?, raza = ?, edad = ?, peso = ?, temperamento = ?
+      `UPDATE MASCOTA SET nombre = ?, especie = ?, raza = ?, edad = ?, peso = ?, temperamento = ?, alergias = ?, restricciones_medicas = ?, vacunas = ?, foto_url = ?
        WHERE id = ?`,
-      [nombre, especie, raza, edad || null, peso || null, observaciones || null, id]
+      [
+        nombre,
+        especie,
+        raza,
+        edad || null,
+        peso || null,
+        temperamento || null,
+        alergias || null,
+        restricciones_medicas || null,
+        vacunasValue,
+        foto_url || null,
+        id
+      ]
     );
 
     await authService.registrarAudit(userId, null, null, null, 'actualizar_mascota', { anterior: mascotaAnterior, nuevo: mascotaData });

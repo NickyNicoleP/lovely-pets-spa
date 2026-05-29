@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { fichaGroomingAPI, productosAPI, agendaAPI } from '../services/api';
 
 export default function Grooming() {
@@ -34,8 +35,8 @@ const [tempObservaciones, setTempObservaciones] = useState('');
   });
 
   const resumenFichas = useMemo(() => ({
-    abiertas: fichas.filter((ficha) => ficha.estado === 'abierta').length,
-    cerradas: fichas.filter((ficha) => ficha.estado === 'cerrada').length
+    abiertas: fichas.filter((ficha) => !ficha.fecha_cierre).length,
+    cerradas: fichas.filter((ficha) => !!ficha.fecha_cierre).length
   }), [fichas]);
 
   useEffect(() => {
@@ -64,7 +65,11 @@ const [tempObservaciones, setTempObservaciones] = useState('');
 
   const loadAgendas = async () => {
     try {
-      const response = await agendaAPI.getAll({ estado: 'confirmada' });
+      let response = await agendaAPI.getAll({ estado: 'confirmada' });
+      // Si no hay resultados por algún filtro, reintentar sin filtro
+      if (!response.data || response.data.length === 0) {
+        response = await agendaAPI.getAll();
+      }
       setAgendas(response.data);
     } catch (error) {
       console.error('Error al cargar agendas:', error);
@@ -74,7 +79,12 @@ const [tempObservaciones, setTempObservaciones] = useState('');
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await fichaGroomingAPI.create(formData);
+      // API expects reserva_id, frontend uses agenda_id
+      const payload = {
+        reserva_id: formData.agenda_id ? parseInt(formData.agenda_id) : null,
+        observaciones: formData.observaciones
+      };
+      await fichaGroomingAPI.create(payload);
       setShowModal(false);
       setFormData({ agenda_id: '', cliente_id: '', mascota_id: '', servicio_id: '', observaciones: '' });
       loadFichas();
@@ -205,12 +215,19 @@ const handleSubirFoto = async (e, tipo) => {
           {fichas.map((ficha) => (
             <div key={ficha.id} className="card">
               <div className="flex items-center justify-between mb-4">
-                <span className={`px-3 py-1 text-sm font-medium rounded-full ${getEstadoColor(ficha.estado)}`}>
-                  {ficha.estado}
-                </span>
-                <span className="text-sm text-gray-500">
-                  {new Date(ficha.fecha_hora_inicio).toLocaleDateString()}
-                </span>
+                {(() => {
+                  const estadoFicha = ficha.fecha_cierre ? 'cerrada' : 'abierta';
+                  return (
+                    <>
+                      <span className={`px-3 py-1 text-sm font-medium rounded-full ${getEstadoColor(estadoFicha)}`}>
+                        {estadoFicha}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {ficha.reserva_fecha_hora ? new Date(ficha.reserva_fecha_hora).toLocaleDateString() : '-'}
+                      </span>
+                    </>
+                  );
+                })()}
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">
                 {ficha.cliente_nombre} {ficha.cliente_apellido}
@@ -218,10 +235,13 @@ const handleSubirFoto = async (e, tipo) => {
               <p className="text-sm text-gray-500 mb-1">
                 Mascota: {ficha.mascota_nombre}
               </p>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-gray-500 mb-2">
                 Servicio: {ficha.servicio_nombre}
               </p>
-              {ficha.estado === 'abierta' && (
+              <Link to={`/grooming/ficha/${ficha.id}`} className="text-sm text-fuchsia-600 hover:text-fuchsia-800 mb-4 inline-block">
+                Ver ficha técnica
+              </Link>
+              {(ficha.fecha_cierre ? 'cerrada' : 'abierta') === 'abierta' && (
                 <div className="flex gap-2">
                   <button
                     onClick={() => {

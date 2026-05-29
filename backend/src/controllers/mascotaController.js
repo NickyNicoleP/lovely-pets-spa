@@ -1,5 +1,5 @@
 const mascotaService = require('../services/mascotaService');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const clienteService = require('../services/clienteService');
 
 exports.getAll = async (req, res) => {
   try {
@@ -25,7 +25,15 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
-    const mascota = await mascotaService.create(req.body, userId);
+    const userRole = req.user ? req.user.rol : null;
+    const mascotaData = { ...req.body };
+
+    if (userRole === 'cliente') {
+      const cliente = await clienteService.getByUsuarioId(userId);
+      mascotaData.cliente_id = cliente.id;
+    }
+
+    const mascota = await mascotaService.create(mascotaData, userId);
     res.status(201).json(mascota);
   } catch (error) {
     res.status(400).json({ error: error.message });

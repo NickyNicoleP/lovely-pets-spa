@@ -87,7 +87,21 @@ export const mascotasAPI = {
   getById: (id) => api.get(`/mascotas/${id}`),
   create: (data) => api.post('/mascotas', data),
   update: (id, data) => api.put(`/mascotas/${id}`, data),
-  delete: (id) => api.delete(`/mascotas/${id}`)
+  delete: (id) => api.delete(`/mascotas/${id}`),
+  uploadVacunas: (formData) => {
+    const uploadApi = axios.create({
+      baseURL: '/api'
+    });
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      uploadApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+    return uploadApi.post('/mascotas/upload-vacunas', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  }
 };
 
 export const serviciosAPI = {
@@ -156,7 +170,23 @@ export const fichaGroomingAPI = {
   getAll: (params) => api.get('/ficha-grooming', { params }),
   getById: (id) => api.get(`/ficha-grooming/${id}`),
   create: (data) => api.post('/ficha-grooming', data),
+  update: (id, data) => api.put(`/ficha-grooming/${id}`, data),
   addInsumo: (id, data) => api.post(`/ficha-grooming/${id}/insumo`, data),
+  uploadFoto: (id, formData) => {
+    const uploadApi = axios.create({
+      baseURL: '/api'
+    });
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      uploadApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+    return uploadApi.post(`/ficha-grooming/${id}/fotos`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  updateChecklistItem: (id, itemKey, data) => api.put(`/ficha-grooming/${id}/checklist/${encodeURIComponent(itemKey)}`, data),
   close: (id) => api.post(`/ficha-grooming/${id}/cerrar`),
   getEstadisticas: (params) => api.get('/ficha-grooming/estadisticas', { params })
 };

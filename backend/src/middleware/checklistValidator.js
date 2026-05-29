@@ -10,21 +10,9 @@ const pool = require('../config/database');
  */
 const REQUIRED_CHECKLIST_ITEMS = [
   {
-    id: 'Baño',
-    nombre: 'Baño',
-    descripcion: 'Baño completado',
-    required: true
-  },
-  {
-    id: 'Secado',
-    nombre: 'Secado',
-    descripcion: 'Secado completado',
-    required: true
-  },
-  {
-    id: 'Corte',
-    nombre: 'Corte',
-    descripcion: 'Corte completado (si aplica)',
+    id: 'Corte de Uñas',
+    nombre: 'Corte de Uñas',
+    descripcion: 'Uñas cortadas',
     required: true
   },
   {
@@ -34,33 +22,27 @@ const REQUIRED_CHECKLIST_ITEMS = [
     required: true
   },
   {
-    id: 'Corte de Uñas',
-    nombre: 'Corte de Uñas',
-    descripcion: 'Uñas cortadas',
+    id: 'Glándulas',
+    nombre: 'Glándulas',
+    descripcion: 'Glándulas limpias y exprimidas',
     required: true
   },
   {
-    id: 'Foto Antes',
-    nombre: 'Foto Antes',
-    descripcion: 'Foto del estado inicial',
+    id: 'Corte',
+    nombre: 'Corte',
+    descripcion: 'Corte completado',
     required: true
   },
   {
-    id: 'Foto Después',
-    nombre: 'Foto Después',
-    descripcion: 'Foto del resultado final',
+    id: 'Baño',
+    nombre: 'Baño',
+    descripcion: 'Baño completado',
     required: true
   },
   {
-    id: 'Notas del Groomer',
-    nombre: 'Notas del Groomer',
-    descripcion: 'Observaciones y notas completadas',
-    required: true
-  },
-  {
-    id: 'Firma/Aprobación del Cliente',
-    nombre: 'Firma/Aprobación del Cliente',
-    descripcion: 'Cliente ha revisado y aprobado',
+    id: 'Perfume',
+    nombre: 'Perfume',
+    descripcion: 'Perfume aplicado',
     required: true
   }
 ];

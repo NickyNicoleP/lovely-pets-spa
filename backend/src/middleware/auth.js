@@ -120,7 +120,7 @@ const validateOwnershipOrAdmin = (resourceType, paramName = 'id') => {
         // Verificar acceso del groomer o propietario
         const [rows] = await pool.execute(
           `SELECT c.usuario_id, fg.groomer_id FROM FICHA_GROOMING fg
-           JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
+           JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
            JOIN MASCOTA m ON sr.mascota_id = m.id
            JOIN CLIENTE c ON m.cliente_id = c.id
            WHERE fg.id = ?`,

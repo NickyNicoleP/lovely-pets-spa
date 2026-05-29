@@ -1,11 +1,12 @@
 const pool = require('../config/database');
 const authService = require('./authService');
+const checklistValidator = require('../middleware/checklistValidator');
 
 class FichaGroomingService {
   async getAll(filters = {}) {
     let query = `
       SELECT fg.id,
-             fg.reserva_id,
+             fg.slot_id as reserva_id,
              fg.estado_ingreso,
              fg.nudos,
              fg.pulgas,
@@ -19,6 +20,8 @@ class FichaGroomingService {
              m.nombre as mascota_nombre,
              m.especie as mascota_especie,
              m.raza as mascota_raza,
+             m.peso as mascota_peso,
+             m.temperamento as mascota_temperamento,
              c.id as cliente_id,
              u.id as cliente_usuario_id,
              u.nombre as cliente_nombre,
@@ -27,7 +30,7 @@ class FichaGroomingService {
              s.nombre as servicio_nombre,
              s.precio_base as servicio_precio
       FROM FICHA_GROOMING fg
-      JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
+      JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
       JOIN MASCOTA m ON sr.mascota_id = m.id
       JOIN CLIENTE c ON m.cliente_id = c.id
       JOIN USUARIO u ON c.usuario_id = u.id
@@ -43,6 +46,7 @@ class FichaGroomingService {
     }
 
     if (filters.estado) {
+      // Allow filtering by estado_ingreso or by closed/open based on fecha_cierre
       query += ' AND fg.estado_ingreso = ?';
       params.push(filters.estado);
     }
@@ -56,7 +60,7 @@ class FichaGroomingService {
   async getById(id) {
     const [fichas] = await pool.execute(
       `SELECT fg.id,
-              fg.reserva_id,
+              fg.slot_id as reserva_id,
               fg.estado_ingreso,
               fg.nudos,
               fg.pulgas,
@@ -70,6 +74,8 @@ class FichaGroomingService {
               m.nombre as mascota_nombre,
               m.especie as mascota_especie,
               m.raza as mascota_raza,
+              m.peso as mascota_peso,
+              m.temperamento as mascota_temperamento,
               c.id as cliente_id,
               u.id as cliente_usuario_id,
               u.nombre as cliente_nombre,
@@ -77,8 +83,8 @@ class FichaGroomingService {
               s.id as servicio_id,
               s.nombre as servicio_nombre,
               s.precio_base as servicio_precio
-       FROM FICHA_GROOMING fg
-       JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
+      FROM FICHA_GROOMING fg
+      JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
        JOIN MASCOTA m ON sr.mascota_id = m.id
        JOIN CLIENTE c ON m.cliente_id = c.id
        JOIN USUARIO u ON c.usuario_id = u.id
@@ -99,10 +105,28 @@ class FichaGroomingService {
       [id]
     );
 
+    const [checklist] = await pool.execute(
+      `SELECT nombre, realizado FROM CHECKLIST_ITEM WHERE ficha_id = ? ORDER BY id`,
+      [id]
+    );
+
+    const [fotos] = await pool.execute(
+      `SELECT id, url, tipo FROM FOTO_SERVICIO WHERE ficha_id = ?`,
+      [id]
+    );
 
     const ficha = fichas[0];
     ficha.insumos = insumos;
     ficha.total_insumos = insumos.reduce((sum, insumo) => sum + (insumo.cantidad * insumo.producto_precio), 0);
+    ficha.checklist = checklist;
+    ficha.fotos_antes = fotos.filter((foto) => foto.tipo === 'antes');
+    ficha.fotos_despues = fotos.filter((foto) => foto.tipo === 'despues');
+
+    try {
+      ficha.estado_ingreso = ficha.estado_ingreso ? JSON.parse(ficha.estado_ingreso) : null;
+    } catch (error) {
+      ficha.estado_ingreso = ficha.estado_ingreso || null;
+    }
 
     return ficha;
   }
@@ -128,7 +152,7 @@ class FichaGroomingService {
     }
 
     const [existentes] = await pool.execute(
-      'SELECT id FROM FICHA_GROOMING WHERE reserva_id = ?',
+      'SELECT id FROM FICHA_GROOMING WHERE slot_id = ?',
       [reserva_id]
     );
 
@@ -137,11 +161,11 @@ class FichaGroomingService {
     }
 
     const [result] = await pool.execute(
-      `INSERT INTO FICHA_GROOMING (reserva_id, estado_ingreso, nudos, pulgas, heridas, tiempo_real_min, observaciones)
+      `INSERT INTO FICHA_GROOMING (slot_id, estado_ingreso, nudos, pulgas, heridas, tiempo_real_min, observaciones)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         reserva_id,
-        estado_ingreso || null,
+        estado_ingreso ? JSON.stringify(estado_ingreso) : null,
         nudos ? 1 : 0,
         pulgas ? 1 : 0,
         heridas ? 1 : 0,
@@ -150,6 +174,8 @@ class FichaGroomingService {
       ]
     );
 
+    await this._createDefaultChecklist(result.insertId);
+
     await pool.execute(
       'UPDATE SLOT_RESERVA SET estado = ? WHERE id = ?',
       ['en_proceso', reserva_id]
@@ -157,6 +183,13 @@ class FichaGroomingService {
 
     await authService.registrarAudit(userId, null, null, null, 'crear_ficha_grooming', fichaData);
     return this.getById(result.insertId);
+  }
+
+  async _createDefaultChecklist(fichaId) {
+    const promises = checklistValidator.REQUIRED_CHECKLIST_ITEMS.map((item) =>
+      checklistValidator.addChecklistItem(fichaId, item.nombre, false, null)
+    );
+    await Promise.all(promises);
   }
 
   async addInsumo(fichaId, insumoData, userId) {
@@ -198,9 +231,43 @@ class FichaGroomingService {
     return { message: 'Insumo agregado correctamente' };
   }
 
+  async update(fichaId, fichaData, userId) {
+    const {
+      estado_ingreso,
+      nudos,
+      pulgas,
+      heridas,
+      observaciones
+    } = fichaData;
+
+    const estadoIngresoValue = typeof estado_ingreso === 'object'
+      ? JSON.stringify(estado_ingreso)
+      : estado_ingreso || null;
+
+    await pool.execute(
+      `UPDATE FICHA_GROOMING SET estado_ingreso = ?, nudos = ?, pulgas = ?, heridas = ?, observaciones = ?
+       WHERE id = ?`,
+      [
+        estadoIngresoValue,
+        nudos ? 1 : 0,
+        pulgas ? 1 : 0,
+        heridas ? 1 : 0,
+        observaciones || null,
+        fichaId
+      ]
+    );
+
+    await authService.registrarAudit(userId, null, null, null, 'actualizar_ficha_grooming', {
+      id: fichaId,
+      data: fichaData
+    });
+
+    return this.getById(fichaId);
+  }
+
   async close(fichaId, userId) {
     const [fichas] = await pool.execute(
-      'SELECT fg.*, sr.id as reserva_id FROM FICHA_GROOMING fg JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id WHERE fg.id = ?',
+      'SELECT fg.*, sr.id as reserva_id FROM FICHA_GROOMING fg JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id WHERE fg.id = ?',
       [fichaId]
     );
 
@@ -279,7 +346,7 @@ class FichaGroomingService {
         COUNT(*) as total_fichas,
         SUM(CASE WHEN fecha_cierre IS NOT NULL THEN 1 ELSE 0 END) as fichas_cerradas,
         SUM(CASE WHEN fecha_cierre IS NULL THEN 1 ELSE 0 END) as fichas_abiertas,
-        COUNT(DISTINCT reserva_id) as reservas_atendidas,
+        COUNT(DISTINCT slot_id) as reservas_atendidas,
         COUNT(DISTINCT DATE(fecha_cierre)) as dias_atencion
        FROM FICHA_GROOMING
        WHERE fecha_cierre BETWEEN ? AND ?`,
