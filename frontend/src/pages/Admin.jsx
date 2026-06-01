@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../services/api';
 import ErrorMessage from '../components/ErrorMessage';
+import WhatsAppSection from '../components/WhatsAppSection';
 
 export default function Admin() {
   const { user } = useAuth();
@@ -160,6 +161,16 @@ export default function Admin() {
             }`}
           >
             Configuración
+          </button>
+          <button
+            onClick={() => setActiveTab('whatsapp')}
+            className={`py-2 border-b-2 font-medium transition ${
+              activeTab === 'whatsapp'
+                ? 'border-primary-600 text-primary-600'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            WhatsApp
           </button>
         </nav>
       </div>
@@ -386,6 +397,14 @@ export default function Admin() {
           <div className="text-slate-600">
             <p>Las opciones de configuración estarán disponibles próximamente.</p>
           </div>
+        </div>
+      )}
+
+      {/* WhatsApp Tab */}
+      {activeTab === 'whatsapp' && (
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-6">Gestión de WhatsApp</h2>
+          <WhatsAppSection />
         </div>
       )}
     </div>

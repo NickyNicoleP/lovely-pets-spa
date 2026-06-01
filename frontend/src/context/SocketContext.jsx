@@ -72,13 +72,28 @@ export const SocketProvider = ({ children }) => {
 
       newSocket.on('nueva_cita', (data) => {
         console.log('📬 Nueva cita:', data);
-        setNotifications(prev => [`Nueva cita: ${data.mascota}`, ...prev]);
+        setNotifications(prev => [data, ...prev]);
         addToast('Se ha creado una nueva reserva', 'Nueva cita', 'success');
       });
       newSocket.on('ficha_completada', (data) => {
         console.log('📬 Ficha completada:', data);
-        setNotifications(prev => [`Ficha completada para ${data.mascota}`, ...prev]);
+        setNotifications(prev => [data, ...prev]);
         addToast('Se completó una ficha de grooming', 'Grooming finalizado', 'success');
+      });
+      newSocket.on('recordatorio_cita', (data) => {
+        console.log('⏰ Recordatorio de cita:', data);
+        setNotifications(prev => [data, ...prev]);
+        addToast(data.cuerpo || 'Te recordamos que tienes una cita pronto', data.titulo || 'Recordatorio de cita', 'info');
+      });
+      newSocket.on('stock_alert', (data) => {
+        console.log('⚠️ Alerta de stock:', data);
+        setNotifications(prev => [data, ...prev]);
+        addToast(data.cuerpo || 'Stock bajo en un producto', data.titulo || 'Alerta de inventario', 'warning');
+      });
+      newSocket.on('new_notification', (data) => {
+        console.log('🔔 Nueva notificación:', data);
+        setNotifications(prev => [data, ...prev]);
+        addToast(data.cuerpo || 'Tienes una nueva notificación', data.titulo || 'Notificación', 'info');
       });
 
       return () => {

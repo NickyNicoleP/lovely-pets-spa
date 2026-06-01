@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const authService = require('./authService');
+const notificacionService = require('./notificacionService');
 
 class ProductoService {
   async getAll() {
@@ -63,7 +64,24 @@ class ProductoService {
     
     await authService.registrarAudit(userId, null, null, null, 'actualizar_producto', { anterior: productoAnterior, nuevo: productoData });
     
-    return this.getById(id);
+    const updatedProduct = await this.getById(id);
+
+    if (
+      productoAnterior.stock > productoAnterior.umbral_alerta &&
+      updatedProduct.stock <= updatedProduct.umbral_alerta
+    ) {
+      await notificacionService.createNotificationsForRoles(
+        ['admin', 'administrador'],
+        'inventario',
+        'app',
+        `Stock bajo: ${updatedProduct.nombre}`,
+        `El producto ${updatedProduct.nombre} tiene stock bajo: ${updatedProduct.stock} unidades.`,
+        'stock_alert',
+        { productoId: updatedProduct.id, stock: updatedProduct.stock }
+      );
+    }
+
+    return updatedProduct;
   }
   
   async delete(id, userId) {

@@ -149,6 +149,7 @@ CREATE TABLE SLOT_RESERVA (
     estado ENUM('pendiente','confirmada','en_proceso','completada','cancelada') DEFAULT 'pendiente',
     precio_final DECIMAL(10,2),
     canal_reserva VARCHAR(30),
+    recordatorio_enviado BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (groomer_id) REFERENCES GROOMER(id),
     FOREIGN KEY (mascota_id) REFERENCES MASCOTA(id),

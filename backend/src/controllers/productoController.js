@@ -49,6 +49,15 @@ exports.delete = async (req, res) => {
   }
 };
 
+exports.getLowStock = async (req, res) => {
+  try {
+    const productos = await productoService.getLowStock();
+    res.json(productos);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 /**
  * Agregar imagen a un producto
  */

@@ -1,5 +1,6 @@
 const fichaGroomingService = require('../services/fichaGroomingService');
 const notificacionService = require('../services/notificacionService');
+const { getWhatsAppService } = require('../services/whatsappService');
 const checklistValidator = require('../middleware/checklistValidator');
 const pool = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
@@ -89,7 +90,7 @@ exports.close = async (req, res) => {
     const ficha = await fichaGroomingService.close(req.params.id, userId);
 
     const [usuarioRows] = await pool.execute(
-      `SELECT u.id FROM FICHA_GROOMING fg
+      `SELECT u.id, u.nombre, u.telefono FROM FICHA_GROOMING fg
        JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
        JOIN MASCOTA m ON sr.mascota_id = m.id
        JOIN CLIENTE c ON m.cliente_id = c.id
@@ -97,15 +98,20 @@ exports.close = async (req, res) => {
        WHERE fg.id = ?`,
       [req.params.id]
     );
-    const usuarioId = usuarioRows?.[0]?.id;
-    if (usuarioId) {
+    const usuarioData = usuarioRows?.[0];
+    if (usuarioData) {
+      const { id: usuarioId, nombre: clienteName, telefono: clientePhone } = usuarioData;
+      
+      // In-app notification
       await notificacionService.createNotification(
         usuarioId,
         'grooming',
         'app',
-        'Ficha de grooming completada',
-        `La atención de ${ficha.mascota_nombre} ha sido finalizada correctamente.`
+        '🐾 Tu mascota está lista para recoger',
+        `¡La atención de ${ficha.mascota_nombre} ha sido finalizada! Puedes recoger a tu mascota en nuestro local.`
       );
+      
+      // Real-time notification
       emitToUser(usuarioId, 'ficha_completada', {
         id: ficha.id,
         mascota: ficha.mascota_nombre,
@@ -113,6 +119,42 @@ exports.close = async (req, res) => {
         fecha: ficha.reserva_fecha_hora,
         estado: 'finalizada'
       });
+
+      // WhatsApp notification
+      if (clientePhone) {
+        try {
+          const whatsappService = await getWhatsAppService();
+          if (whatsappService.isConnected) {
+            await whatsappService.sendReadyForPickup(
+              clientePhone,
+              clienteName,
+              ficha.mascota_nombre
+            );
+          }
+        } catch (whatsappError) {
+          console.log('[FICHA CLOSE] WhatsApp notification skipped:', whatsappError.message);
+        }
+      }
+
+      const [lowStockProductos] = await pool.execute(
+        `SELECT DISTINCT p.id, p.nombre, p.stock, p.umbral_alerta
+         FROM FICHA_INSUMO fi
+         JOIN PRODUCTO p ON fi.producto_id = p.id
+         WHERE fi.ficha_id = ? AND p.stock <= p.umbral_alerta`,
+        [req.params.id]
+      );
+
+      for (const producto of lowStockProductos) {
+        await notificacionService.createNotificationsForRoles(
+          ['admin', 'administrador'],
+          'inventario',
+          'app',
+          `Stock bajo tras grooming: ${producto.nombre}`,
+          `El producto ${producto.nombre} quedó con stock bajo: ${producto.stock} unidades tras cerrar la ficha.`,
+          'stock_alert',
+          { productoId: producto.id, stock: producto.stock }
+        );
+      }
     }
 
     res.json(ficha);

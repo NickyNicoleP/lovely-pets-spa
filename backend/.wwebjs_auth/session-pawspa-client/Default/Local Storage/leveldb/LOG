@@ -1,0 +1,6 @@
+2026/06/01-16:23:05.971 62d0 Reusing MANIFEST C:\xampp\htdocs\Pet_Spa_Sist\backend\.wwebjs_auth\session-pawspa-client\Default\Local Storage\leveldb/MANIFEST-000001
+2026/06/01-16:23:05.982 62d0 Recovering log #3
+2026/06/01-16:23:05.987 62d0 Reusing old log C:\xampp\htdocs\Pet_Spa_Sist\backend\.wwebjs_auth\session-pawspa-client\Default\Local Storage\leveldb/000003.log 
+2026/06/01-16:24:05.998 76dc Level-0 table #5: started
+2026/06/01-16:24:06.005 76dc Level-0 table #5: 22267 bytes OK
+2026/06/01-16:24:06.010 76dc Delete type=0 #3

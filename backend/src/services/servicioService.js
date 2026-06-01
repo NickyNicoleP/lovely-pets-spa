@@ -3,7 +3,14 @@ const pool = require('../config/database');
 class ServicioService {
   async getAll() {
     const [servicios] = await pool.execute(
-      'SELECT * FROM SERVICIO ORDER BY nombre'
+      `SELECT s.id, s.nombre, s.descripcion, s.duracion_min, s.precio_base, s.tiempo_limpieza_min, s.ajuste_raza_pct
+       FROM SERVICIO s
+       JOIN (
+         SELECT nombre, MIN(precio_base) AS precio_base
+         FROM SERVICIO
+         GROUP BY nombre
+       ) m ON s.nombre = m.nombre AND s.precio_base = m.precio_base
+       ORDER BY s.nombre`
     );
     return servicios;
   }

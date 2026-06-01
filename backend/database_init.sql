@@ -130,6 +130,8 @@ CREATE TABLE SLOT_RESERVA (
     fecha_hora_fin DATETIME,
     precio_final DECIMAL(10,2),
     estado ENUM('pendiente','confirmada','en_progreso','completada','cancelada') DEFAULT 'pendiente',
+    canal_reserva VARCHAR(30),
+    recordatorio_enviado BOOLEAN DEFAULT FALSE,
     notas TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (groomer_id) REFERENCES GROOMER(id) ON DELETE RESTRICT,

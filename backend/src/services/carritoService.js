@@ -80,7 +80,7 @@ class CarritoService {
     const productIds = items.map((item) => item.producto_id);
     const placeholders = productIds.map(() => '?').join(',');
     const [productos] = await pool.execute(
-      `SELECT id, nombre, precio, stock FROM PRODUCTO WHERE id IN (${placeholders}) AND activo = TRUE`,
+      `SELECT id, nombre, precio, stock, umbral_alerta FROM PRODUCTO WHERE id IN (${placeholders}) AND activo = TRUE`,
       productIds
     );
 
@@ -107,7 +107,9 @@ class CarritoService {
         nombre: product.nombre,
         cantidad,
         precio_unitario: Number(product.precio),
-        subtotal: Number((product.precio * cantidad).toFixed(2))
+        subtotal: Number((product.precio * cantidad).toFixed(2)),
+        stock: Number(product.stock),
+        umbral_alerta: Number(product.umbral_alerta)
       };
     });
 
@@ -125,6 +127,19 @@ class CarritoService {
         'UPDATE PRODUCTO SET stock = stock - ? WHERE id = ?',
         [item.cantidad, item.producto_id]
       );
+
+      const newStock = item.stock - item.cantidad;
+      if (item.stock > item.umbral_alerta && newStock <= item.umbral_alerta) {
+        await notificacionService.createNotificationsForRoles(
+          ['admin', 'administrador'],
+          'inventario',
+          'app',
+          `Stock bajo: ${item.nombre}`,
+          `El producto ${item.nombre} quedó con stock bajo: ${newStock} unidades.`,
+          'stock_alert',
+          { productoId: item.producto_id, stock: newStock }
+        );
+      }
 
       await pool.execute(
         `INSERT INTO MOVIMIENTO_INVENTARIO (producto_id, tipo, cantidad, origen, referencia_id) 

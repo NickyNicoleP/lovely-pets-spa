@@ -9,42 +9,15 @@ const pool = require('../config/database');
  * Items obligatorios del checklist
  */
 const REQUIRED_CHECKLIST_ITEMS = [
-  {
-    id: 'Corte de Uñas',
-    nombre: 'Corte de Uñas',
-    descripcion: 'Uñas cortadas',
-    required: true
-  },
-  {
-    id: 'Limpieza de Oídos',
-    nombre: 'Limpieza de Oídos',
-    descripcion: 'Oídos limpios',
-    required: true
-  },
-  {
-    id: 'Glándulas',
-    nombre: 'Glándulas',
-    descripcion: 'Glándulas limpias y exprimidas',
-    required: true
-  },
-  {
-    id: 'Corte',
-    nombre: 'Corte',
-    descripcion: 'Corte completado',
-    required: true
-  },
-  {
-    id: 'Baño',
-    nombre: 'Baño',
-    descripcion: 'Baño completado',
-    required: true
-  },
-  {
-    id: 'Perfume',
-    nombre: 'Perfume',
-    descripcion: 'Perfume aplicado',
-    required: true
-  }
+  { id: 'baño', nombre: 'Baño', descripcion: 'Baño completado', required: true },
+  { id: 'secado', nombre: 'Secado', descripcion: 'Secado completado', required: true },
+  { id: 'corte', nombre: 'Corte', descripcion: 'Corte completado', required: true },
+  { id: 'limpieza_oidos', nombre: 'Limpieza de Oídos', descripcion: 'Limpieza de oídos', required: true },
+  { id: 'corte_unas', nombre: 'Corte de Uñas', descripcion: 'Corte de uñas', required: true },
+  { id: 'foto_antes', nombre: 'Foto Antes', descripcion: 'Foto de evidencia antes', required: true },
+  { id: 'foto_despues', nombre: 'Foto Después', descripcion: 'Foto de evidencia después', required: true },
+  { id: 'notas_groomer', nombre: 'Notas del Groomer', descripcion: 'Notas del groomer', required: true },
+  { id: 'firma_cliente', nombre: 'Firma/Aprobación del Cliente', descripcion: 'Firma del cliente', required: true }
 ];
 
 async function getChecklistByFichaId(fichaId) {

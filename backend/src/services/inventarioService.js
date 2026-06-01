@@ -1,13 +1,12 @@
 const pool = require('../config/database');
+const notificacionService = require('./notificacionService');
 
 class InventarioService {
   async getAll(filters = {}) {
     let query = `
-      SELECT mi.*, p.nombre as producto_nombre, p.stock as stock_actual, p.stock_minimo,
-             u.nombre as usuario_nombre
+      SELECT mi.*, p.nombre as producto_nombre, p.stock as stock_actual, p.umbral_alerta as stock_minimo
       FROM movimiento_inventario mi
       JOIN PRODUCTO p ON mi.producto_id = p.id
-      LEFT JOIN USUARIO u ON mi.usuario_id = u.id
       WHERE 1=1
     `;
     
@@ -24,71 +23,84 @@ class InventarioService {
     }
     
     if (filters.fecha_inicio) {
-      query += ' AND DATE(mi.created_at) >= ?';
+      query += ' AND DATE(mi.fecha) >= ?';
       params.push(filters.fecha_inicio);
     }
     
     if (filters.fecha_fin) {
-      query += ' AND DATE(mi.created_at) <= ?';
+      query += ' AND DATE(mi.fecha) <= ?';
       params.push(filters.fecha_fin);
     }
     
-    query += ' ORDER BY mi.created_at DESC';
+    query += ' ORDER BY mi.fecha DESC';
     
     const [movimientos] = await pool.execute(query, params);
     return movimientos;
   }
   
+  async getById(id) {
+    const [movimientos] = await pool.execute(
+      'SELECT mi.*, p.nombre as producto_nombre FROM movimiento_inventario mi JOIN PRODUCTO p ON mi.producto_id = p.id WHERE mi.id = ?',
+      [id]
+    );
+
+    if (movimientos.length === 0) {
+      throw new Error('Movimiento no encontrado');
+    }
+
+    return movimientos[0];
+  }
+  
   async create(movimientoData, userId) {
     const { producto_id, tipo, cantidad, motivo } = movimientoData;
     
-    // Verificar stock para salidas
-    if (tipo === 'salida') {
-      const [productos] = await pool.execute(
-        'SELECT stock FROM PRODUCTO WHERE id = ?',
-        [producto_id]
-      );
-      
-      if (productos.length === 0) {
-        throw new Error('Producto no encontrado');
-      }
-      
-      if (productos[0].stock < cantidad) {
-        throw new Error('Stock insuficiente');
-      }
+    const [productRows] = await pool.execute(
+      'SELECT stock, umbral_alerta, nombre FROM PRODUCTO WHERE id = ?',
+      [producto_id]
+    );
+
+    if (productRows.length === 0) {
+      throw new Error('Producto no encontrado');
+    }
+
+    const producto = productRows[0];
+
+    if (tipo === 'salida' && producto.stock < cantidad) {
+      throw new Error('Stock insuficiente');
     }
     
     const [result] = await pool.execute(
-      `INSERT INTO movimiento_inventario (producto_id, tipo, cantidad, motivo, usuario_id) 
+      `INSERT INTO movimiento_inventario (producto_id, tipo, cantidad, origen, referencia_id) 
        VALUES (?, ?, ?, ?, ?)`,
-      [producto_id, tipo, cantidad, motivo, userId]
+      [producto_id, tipo, cantidad, motivo || 'Manual', userId || null]
     );
     
     // Actualizar stock del producto
     const cambioStock = tipo === 'entrada' ? cantidad : -cantidad;
+    const newStock = producto.stock + cambioStock;
     await pool.execute(
       'UPDATE PRODUCTO SET stock = stock + ? WHERE id = ?',
       [cambioStock, producto_id]
     );
-    
-    return this.getById(result.insertId);
-  }
-  
-  async getById(id) {
-    const [movimientos] = await pool.execute(
-      `SELECT mi.*, p.nombre as producto_nombre, u.nombre as usuario_nombre
-       FROM movimiento_inventario mi
-       JOIN PRODUCTO p ON mi.producto_id = p.id
-       LEFT JOIN USUARIO u ON mi.usuario_id = u.id
-       WHERE mi.id = ?`,
-      [id]
-    );
-    
-    if (movimientos.length === 0) {
-      throw new Error('Movimiento no encontrado');
+
+    if (
+      tipo === 'salida' &&
+      producto.stock > producto.umbral_alerta &&
+      newStock <= producto.umbral_alerta
+    ) {
+      const notificacionService = require('./notificacionService');
+      await notificacionService.createNotificationsForRoles(
+        ['admin', 'administrador'],
+        'inventario',
+        'app',
+        `Stock bajo: ${producto.nombre}`,
+        `El producto ${producto.nombre} quedó con stock bajo: ${newStock} unidades tras registro de movimiento.`,
+        'stock_alert',
+        { productoId: producto_id, stock: newStock }
+      );
     }
     
-    return movimientos[0];
+    return this.getById(result.insertId);
   }
 }
 

@@ -38,7 +38,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     setUser(userData);
-    return { success: true };
+    return { success: true, user: userData };
   };
 
   const verify2FA = async (userId, code) => {
@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     setUser(userData);
-    return { success: true };
+    return { success: true, user: userData };
   };
 
   const register = async (userData) => {

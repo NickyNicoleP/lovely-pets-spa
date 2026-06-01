@@ -14,6 +14,14 @@ export default function Login() {
   const { login, verify2FA } = useAuth();
   const navigate = useNavigate();
 
+  const getRedirectPath = (rol) => {
+    if (rol === 'admin' || rol === 'administrador') return '/';
+    if (rol === 'empleado' || rol === 'veterinario') return '/agenda';
+    if (rol === 'groomer') return '/grooming';
+    if (rol === 'cliente') return '/mis-mascotas';
+    return '/';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -26,7 +34,8 @@ export default function Login() {
         setUserId(result.userId);
         setShow2FA(true);
       } else if (result.success) {
-        navigate('/');
+        const redirectPath = getRedirectPath(result.user?.rol);
+        navigate(redirectPath);
       }
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -41,8 +50,9 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await verify2FA(userId, code2FA);
-      navigate('/');
+      const result = await verify2FA(userId, code2FA);
+      const redirectPath = getRedirectPath(result.user?.rol);
+      navigate(redirectPath);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {

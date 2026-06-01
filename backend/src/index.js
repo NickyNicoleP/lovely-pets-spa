@@ -5,6 +5,8 @@ require('dotenv').config();
 
 const http = require('http');
 const { initIo } = require('./socket');
+const { startReminderScheduler } = require('./services/notificationScheduler');
+const { getWhatsAppService } = require('./services/whatsappService');
 const { forceHTTPS, securityHeaders } = require('./utils/httpsConfig');
 const { sanitizeResponse } = require('./utils/xssSanitizer');
 const authRoutes = require('./routes/auth');
@@ -19,7 +21,10 @@ const agendaRoutes = require('./routes/agenda');
 const groomerRoutes = require('./routes/groomers');
 const fichaGroomingRoutes = require('./routes/fichaGrooming');
 const inventarioRoutes = require('./routes/inventario');
+const pagoRoutes = require('./routes/pagos');
 const auditRoutes = require('./routes/audit');
+const reporteRoutes = require('./routes/reportes');
+const whatsappRoutes = require('./routes/whatsapp');
 const { validateCSRF, injectCSRFToken } = require('./middleware/csrfProtection');
 
 const app = express();
@@ -71,7 +76,10 @@ app.use('/api/agenda', agendaRoutes);
 app.use('/api/groomers', groomerRoutes);
 app.use('/api/ficha-grooming', fichaGroomingRoutes);
 app.use('/api/inventario', inventarioRoutes);
+app.use('/api/pagos', pagoRoutes);
 app.use('/api/audit', auditRoutes);
+app.use('/api/reportes', reporteRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -91,6 +99,19 @@ initIo(server);
 
 server.listen(PORT, () => {
   console.log(`Servidor PawSpa corriendo en puerto ${PORT}`);
+
+  if (process.env.NODE_ENV !== 'test') {
+    startReminderScheduler();
+    
+    // Initialize WhatsApp service
+    console.log('Initializing WhatsApp service...');
+    getWhatsAppService().then(() => {
+      console.log('WhatsApp service initialized');
+    }).catch((error) => {
+      console.warn('Warning: WhatsApp service initialization failed:', error.message);
+      console.log('The system will continue running without WhatsApp integration');
+    });
+  }
 });
 
 module.exports = app;

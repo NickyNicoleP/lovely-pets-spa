@@ -152,6 +152,12 @@ export const carritoAPI = {
   updateStatus: (id, data) => api.put(`/carrito/${id}/status`, data)
 };
 
+export const pagosAPI = {
+  getAll: (params) => api.get('/pagos', { params }),
+  getById: (id) => api.get(`/pagos/${id}`),
+  create: (data) => api.post('/pagos', data)
+};
+
 export const notificacionesAPI = {
   getAll: () => api.get('/notificaciones'),
   markRead: (id) => api.patch(`/notificaciones/${id}/read`)
@@ -209,4 +215,20 @@ export const groomersAPI = {
   update: (id, data) => api.put(`/groomers/${id}`, data),
   delete: (id) => api.delete(`/groomers/${id}`),
   updateDisponibilidad: (id, data) => api.put(`/groomers/${id}/disponibilidad`, data)
+};
+
+export const reportesAPI = {
+  getVentas: (params) => api.get('/reportes/ventas', { params }),
+  getAgendaDiaria: (fecha) => api.get('/reportes/agenda-diaria', { params: { fecha } }),
+  getHistorialGroomer: (groomer_id, params) => api.get(`/reportes/groomer/${groomer_id}/historial`, { params }),
+  getEstadisticasGroomer: (groomer_id, params) => api.get(`/reportes/groomer/${groomer_id}/estadisticas`, { params }),
+  getEstadisticasGenerales: (params) => api.get('/reportes/estadisticas', { params })
+};
+
+export const whatsappAPI = {
+  getStatus: () => api.get('/whatsapp/status'),
+  getQrCode: () => api.get('/whatsapp/qr'),
+  getMessageHistory: (limit = 50) => api.get('/whatsapp/history', { params: { limit } }),
+  reconnect: () => api.post('/whatsapp/reconnect'),
+  disconnect: () => api.post('/whatsapp/disconnect')
 };

@@ -9,8 +9,8 @@ router.get('/:id', clienteController.getById);
 router.get('/:id/mascotas', clienteController.getMascotas);
 
 // Rutas protegidas
-router.post('/', authenticateToken, requireRole('admin', 'empleado'), clienteController.create);
-router.put('/:id', authenticateToken, requireRole('admin', 'empleado'), clienteController.update);
-router.delete('/:id', authenticateToken, requireRole('admin'), clienteController.delete);
+router.post('/', authenticateToken, requireRole(['admin', 'empleado']), clienteController.create);
+router.put('/:id', authenticateToken, requireRole(['admin', 'empleado']), clienteController.update);
+router.delete('/:id', authenticateToken, requireRole(['admin']), clienteController.delete);
 
 module.exports = router;

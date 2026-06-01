@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { agendaAPI, clientesAPI, mascotasAPI, serviciosAPI } from '../services/api';
+import { agendaAPI, clientesAPI, mascotasAPI, serviciosAPI, groomersAPI } from '../services/api';
 
 export default function Agenda() {
   const [reservas, setReservas] = useState([]);
@@ -17,6 +17,8 @@ export default function Agenda() {
     cliente_id: '',
     mascota_id: '',
     servicio_id: '',
+    groomer_id: '',
+    fecha: getLocalIsoDate(),
     hora: '',
     observaciones: '',
     promoCode: ''
@@ -24,6 +26,7 @@ export default function Agenda() {
   const [clientes, setClientes] = useState([]);
   const [mascotas, setMascotas] = useState([]);
   const [servicios, setServicios] = useState([]);
+  const [groomers, setGroomers] = useState([]);
   const [horariosDisponibles, setHorariosDisponibles] = useState([]);
   const [showClientForm, setShowClientForm] = useState(false);
   const [showPetForm, setShowPetForm] = useState(false);
@@ -88,8 +91,11 @@ export default function Agenda() {
 
   useEffect(() => {
     loadReservas();
-    loadServicios();
   }, [selectedDate]);
+
+  useEffect(() => {
+    loadServicios();
+  }, []);
 
   useEffect(() => {
     if (formData.cliente_id) {
@@ -98,10 +104,10 @@ export default function Agenda() {
   }, [formData.cliente_id]);
 
   useEffect(() => {
-    if (formData.servicio_id && selectedDate) {
-      loadHorarios();
+    if (formData.servicio_id && showModal && formData.fecha) {
+      loadHorarios(formData.fecha);
     }
-  }, [formData.servicio_id, selectedDate]);
+  }, [formData.servicio_id, formData.fecha, showModal]);
 
   const loadReservas = async () => {
     try {
@@ -120,6 +126,15 @@ export default function Agenda() {
       setServicios(response.data);
     } catch (error) {
       console.error('Error al cargar servicios:', error);
+    }
+  };
+
+  const loadGroomers = async () => {
+    try {
+      const response = await groomersAPI.getAll();
+      setGroomers(response.data);
+    } catch (error) {
+      console.error('Error al cargar groomers:', error);
     }
   };
 
@@ -177,25 +192,51 @@ export default function Agenda() {
     }
   };
 
-  const loadHorarios = async () => {
+  const horariosDefault = [
+    '09:00:00',
+    '10:00:00',
+    '11:00:00',
+    '12:00:00',
+    '13:00:00',
+    '14:00:00',
+    '15:00:00',
+    '16:00:00',
+    '17:00:00',
+    '18:00:00',
+    '19:00:00',
+    '20:00:00'
+  ];
+
+  const loadHorarios = async (fecha = selectedDate) => {
     try {
       const params = {
-        fecha: selectedDate,
+        fecha: fecha,
         servicio_id: formData.servicio_id
       };
       if (formData.mascota_id) {
         params.mascota_id = formData.mascota_id;
       }
       const response = await agendaAPI.getHorarios(params);
-      setHorariosDisponibles(response.data);
+      const horarios = Array.isArray(response.data) && response.data.length > 0
+        ? response.data
+        : horariosDefault;
+      setHorariosDisponibles(horarios);
     } catch (error) {
       console.error('Error al cargar horarios:', error);
+      setHorariosDisponibles(horariosDefault);
     }
   };
 
-  const selectedService = servicios.find((servicio) => servicio.id === Number(formData.servicio_id));
+  const serviciosUnicos = useMemo(() => {
+    return servicios.filter(
+      (s, index, self) => index === self.findIndex((t) => t.id === s.id)
+    );
+  }, [servicios]);
+
+  const selectedService = serviciosUnicos.find((servicio) => servicio.id === Number(formData.servicio_id));
 
   const fechaFormateada = new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'America/La_Paz',
     weekday: 'long',
     day: 'numeric',
     month: 'long'
@@ -238,17 +279,25 @@ export default function Agenda() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const precioBase = selectedService?.precio || 0;
+    const precioBase = selectedService?.precio_base ?? selectedService?.precio ?? 0;
     const precioCalculado = calcularPrecioConPromo(precioBase, formData.promoCode);
 
+    // Sanitizar todos los campos para evitar undefined
+    const reservaData = {
+      cliente_id: formData.cliente_id ? Number(formData.cliente_id) : null,
+      mascota_id: formData.mascota_id ? Number(formData.mascota_id) : null,
+      servicio_id: formData.servicio_id ? Number(formData.servicio_id) : null,
+      groomer_id: formData.groomer_id ? Number(formData.groomer_id) : null,
+      fecha: formData.fecha || null,
+      hora: formData.hora || null,
+      observaciones: formData.observaciones ? String(formData.observaciones).trim() : null,
+      precio_final: precioCalculado || null
+    };
+
     try {
-      await agendaAPI.create({
-        ...formData,
-        fecha: selectedDate,
-        precio_final: precioCalculado
-      });
+      await agendaAPI.create(reservaData);
       setShowModal(false);
-      setFormData({ cliente_id: '', mascota_id: '', servicio_id: '', hora: '', observaciones: '', promoCode: '' });
+      setFormData({ cliente_id: '', mascota_id: '', servicio_id: '', groomer_id: '', fecha: getLocalIsoDate(), hora: '', observaciones: '', promoCode: '' });
       loadReservas();
     } catch (error) {
       alert(error.response?.data?.error || error.message);
@@ -286,6 +335,8 @@ export default function Agenda() {
         <button
           onClick={() => {
             loadClientes();
+            loadGroomers();
+            setFormData({ cliente_id: '', mascota_id: '', servicio_id: '', groomer_id: '', fecha: getLocalIsoDate(), hora: '', observaciones: '', promoCode: '' });
             setShowModal(true);
           }}
           className="btn btn-primary"
@@ -683,9 +734,25 @@ export default function Agenda() {
                   required
                 >
                   <option value="">Seleccionar servicio</option>
-                  {servicios.map((servicio) => (
+                  {serviciosUnicos.map((servicio) => (
                     <option key={servicio.id} value={servicio.id}>
-                      {servicio.nombre} - Bs {servicio.precio} ({servicio.duracion_minutos} min)
+                      {servicio.nombre} - Bs {servicio.precio_base ?? servicio.precio ?? 0} ({servicio.duracion_min || servicio.duracion_minutos || 0} min)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="label">Groomer (opcional)</label>
+                <select
+                  className="input"
+                  value={formData.groomer_id}
+                  onChange={(e) => setFormData({ ...formData, groomer_id: e.target.value })}
+                >
+                  <option value="">Sin asignar</option>
+                  {groomers.map((groomer) => (
+                    <option key={groomer.id} value={groomer.id}>
+                      {groomer.usuario_nombre || `Groomer ${groomer.id}`}
                     </option>
                   ))}
                 </select>
@@ -707,9 +774,21 @@ export default function Agenda() {
                 </select>
                 {selectedService && formData.promoCode && (
                   <p className="text-sm text-green-600 mt-2">
-                    Precio con promo: Bs {calcularPrecioConPromo(selectedService.precio, formData.promoCode).toFixed(2)}
+                    Precio con promo: Bs {calcularPrecioConPromo(selectedService.precio_base ?? selectedService.precio ?? 0, formData.promoCode).toFixed(2)}
                   </p>
                 )}
+              </div>
+
+              <div className="mb-4">
+                <label className="label">Fecha</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={formData.fecha}
+                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value, hora: '' })}
+                  min={getLocalIsoDate()}
+                  required
+                />
               </div>
 
               <div className="mb-4">
@@ -719,7 +798,7 @@ export default function Agenda() {
                   value={formData.hora}
                   onChange={(e) => setFormData({ ...formData, hora: e.target.value })}
                   required
-                  disabled={horariosDisponibles.length === 0}
+                  disabled={false}
                 >
                   <option value="">Seleccionar horario</option>
                   {horariosDisponibles.map((horario) => (

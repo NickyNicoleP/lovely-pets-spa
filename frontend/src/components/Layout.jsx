@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { notificacionesAPI, productosAPI } from '../services/api';
 import LovelyPetsLogo from './LovelyPetsLogo';
 import Toast from './Toast';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const { user, logout } = useAuth();
+  const { notifications: socketNotifications } = useSocket();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -15,18 +19,63 @@ export default function Layout() {
     navigate('/login');
   };
 
+  const loadUnreadCount = async () => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    try {
+      const response = await notificacionesAPI.getAll();
+      const notifications = Array.isArray(response.data) ? response.data : [];
+      const count = notifications.filter((item) => !item.leida).length;
+      setUnreadCount(count);
+    } catch (error) {
+      console.error('Error cargando notificaciones:', error);
+    }
+  };
+
+  const loadLowStockCount = async () => {
+    if (!user || (user.rol !== 'admin' && user.rol !== 'administrador')) {
+      setLowStockCount(0);
+      return;
+    }
+
+    try {
+      const response = await productosAPI.getLowStock();
+      const productos = Array.isArray(response.data) ? response.data : [];
+      setLowStockCount(productos.length);
+    } catch (error) {
+      console.error('Error cargando productos con bajo stock:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadUnreadCount();
+    loadLowStockCount();
+  }, [user]);
+
+  useEffect(() => {
+    if (socketNotifications && socketNotifications.length > 0) {
+      loadUnreadCount();
+    }
+  }, [socketNotifications]);
+
+  const role = user?.rol;
   const navItems = [
-    { path: '/', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', label: 'Dashboard' },
-    { path: '/agenda', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', label: 'Agenda' },
-    { path: '/grooming', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', label: 'Grooming' },
-    { path: '/mascotas/nueva', icon: 'M12 4.354a4 4 0 100 7.292 4 4 0 000-7.292zM6 20a6 6 0 0112 0H6z', label: 'Registrar mascota' },
-    { path: '/productos', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', label: 'Productos' },
-    { path: '/carrito', icon: 'M3 3h18v2H3V3zm0 6h18v2H3V9zm0 6h18v2H3v-2zm0 6h18v2H3v-2z', label: 'Tienda' },
-    { path: '/notificaciones', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1h6z', label: 'Notificaciones' },
-    ...(user?.rol === 'admin' || user?.rol === 'administrador'
-      ? [{ path: '/admin', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', label: 'Admin' }]
-      : [])
-  ];
+    { path: '/', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', label: 'Dashboard', roles: ['admin', 'administrador', 'empleado', 'groomer', 'veterinario', 'cliente'] },
+    { path: '/agenda', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', label: 'Agenda', roles: ['admin', 'administrador', 'empleado', 'veterinario'] },
+    { path: '/caja', icon: 'M3 10h18M7 6h10M8 14h8m-2 4h2', label: 'Caja', roles: ['admin', 'administrador', 'empleado'] },
+    { path: '/grooming', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', label: 'Grooming', roles: ['admin', 'administrador', 'groomer'] },
+    { path: '/mascotas/nueva', icon: 'M12 4.354a4 4 0 100 7.292 4 4 0 000-7.292zM6 20a6 6 0 0112 0H6z', label: 'Registrar mascota', roles: ['cliente'] },
+    { path: '/mis-mascotas', icon: 'M12 4.354a4 4 0 100 7.292 4 4 0 000-7.292zM6 20a6 6 0 0112 0H6z', label: 'Mis mascotas', roles: ['cliente'] },
+    { path: '/productos', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4', label: 'Productos', roles: ['admin', 'administrador', 'empleado', 'groomer', 'veterinario', 'cliente'] },
+    { path: '/inventario', icon: 'M3 3h18v2H3V3zm0 6h18v2H3V9zm0 6h18v2H3v-2zm0 6h18v2H3v-2z', label: 'Inventario', roles: ['admin', 'administrador'], badge: lowStockCount },
+    { path: '/carrito', icon: 'M3 3h18v2H3V3zm0 6h18v2H3V9zm0 6h18v2H3v-2zm0 6h18v2H3v-2z', label: 'Tienda', roles: ['cliente'] },
+    { path: '/notificaciones', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1h6z', label: 'Notificaciones', roles: ['admin', 'administrador', 'empleado', 'groomer', 'veterinario', 'cliente'], badge: unreadCount },
+    { path: '/reportes', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', label: 'Reportes', roles: ['admin', 'administrador', 'empleado', 'groomer', 'veterinario'] },
+    { path: '/admin', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', label: 'Admin', roles: ['admin', 'administrador'] }
+  ].filter((item) => item.roles.includes(role));
 
   const { toastMessages, removeToast } = useSocket();
 
@@ -67,7 +116,14 @@ export default function Layout() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                 </svg>
-                <span>{item.label}</span>
+                <span className="flex items-center gap-2">
+                  {item.label}
+                  {item.badge > 0 && (
+                    <span className="inline-flex items-center justify-center rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                      {item.badge}
+                    </span>
+                  )}
+                </span>
               </NavLink>
             ))}
           </nav>

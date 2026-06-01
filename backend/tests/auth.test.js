@@ -409,12 +409,12 @@ describe('Agenda Service - Pruebas de Reservas', () => {
       const userId = 1;
       
       const mockServicio = [[{ duracion_min: 60, precio_base: 50000, tiempo_limpieza_min: 10 }]];
-      const mockReservas = [[{ count: 0 }]];
+      const mockMascota = [[{ peso: 15, raza_id: 1, temperamento: 'tranquilo' }]];
       
       pool.execute
         .mockResolvedValueOnce(mockServicio) // Obtener duración servicio
-        .mockResolvedValueOnce(mockReservas) // Verificar disponibilidad
-        .mockResolvedValueOnce([{ insertId: 1 }]) // Insertar reserva
+        .mockResolvedValueOnce(mockMascota) // Obtener datos mascota
+        .mockResolvedValueOnce([{ insertId: 1 }]) // Insertar reserva (groomer_id = null)
         .mockResolvedValueOnce([{ insertId: 1 }]); // Audit log
       
       const { default: agendaServiceModule } = require('../src/services/agendaService');
@@ -440,11 +440,13 @@ describe('Agenda Service - Pruebas de Reservas', () => {
       const userId = 1;
       
       const mockServicio = [[{ duracion_min: 60, precio_base: 50000, tiempo_limpieza_min: 10 }]];
-      const mockReservas = [[{ count: 1 }]]; // Hay conflicto
+      const mockMascota = [[{ peso: 15, raza_id: 1, temperamento: 'tranquilo' }]];
       
+      // Simular fallo de inserción (groomer_id NOT NULL violation)
       pool.execute
         .mockResolvedValueOnce(mockServicio)
-        .mockResolvedValueOnce(mockReservas);
+        .mockResolvedValueOnce(mockMascota)
+        .mockResolvedValueOnce(null); // Error al insertar
       
       const { default: agendaServiceModule } = require('../src/services/agendaService');
       agendaService = agendaServiceModule;
