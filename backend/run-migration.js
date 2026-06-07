@@ -9,6 +9,22 @@ const connectionConfig = {
   charset: process.env.DB_CHARSET || 'utf8mb4_unicode_ci',
 };
 
+async function addColumnIfNotExists(connection, tableName, columnName, definition) {
+  const [columns] = await connection.execute(
+    `SHOW COLUMNS FROM \`${tableName}\` WHERE Field = ?`,
+    [columnName]
+  );
+
+  if (!columns || columns.length === 0) {
+    await connection.execute(
+      `ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`
+    );
+    console.log(`✓ Columna "${columnName}" agregada a ${tableName}`);
+  } else {
+    console.log(`• Columna "${columnName}" ya existe en ${tableName}, se omite`);
+  }
+}
+
 async function runMigration() {
   const connection = await mysql.createConnection(connectionConfig);
 
@@ -16,15 +32,10 @@ async function runMigration() {
     console.log('Iniciando migración de imágenes...');
 
     // Agregar columnas a PRODUCTO
-    await connection.execute(
-      'ALTER TABLE PRODUCTO ADD COLUMN IF NOT EXISTS imagen VARCHAR(255)'
-    );
-    console.log('✓ Columna "imagen" agregada');
-
-    await connection.execute(
-      'ALTER TABLE PRODUCTO ADD COLUMN IF NOT EXISTS imagen_url TEXT'
-    );
-    console.log('✓ Columna "imagen_url" agregada');
+    await addColumnIfNotExists(connection, 'PRODUCTO', 'imagen', 'VARCHAR(255)');
+    await addColumnIfNotExists(connection, 'PRODUCTO', 'imagen_url', 'TEXT');
+    await addColumnIfNotExists(connection, 'FICHA_INSUMO', 'estado', "ENUM('pendiente','usado','devuelto','merma') DEFAULT 'pendiente'");
+    await addColumnIfNotExists(connection, 'FICHA_INSUMO', 'responsable', 'VARCHAR(150) NULL');
 
     // Crear tabla FOTO_PRODUCTO
     await connection.execute(`
@@ -73,10 +84,56 @@ async function runMigration() {
     }
 
     // Agregar columna observaciones a SLOT_RESERVA si no existe (para registrar notas y pagos)
+    await addColumnIfNotExists(connection, 'SLOT_RESERVA', 'observaciones', 'TEXT');
+    await addColumnIfNotExists(connection, 'SLOT_RESERVA', 'codigo_cupon', 'VARCHAR(60)');
+    await addColumnIfNotExists(connection, 'CARRITO_PEDIDO', 'cupon_codigo', 'VARCHAR(60)');
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS CONFIGURACION (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        capacidad_diaria INT DEFAULT 10,
+        politica_cancelacion TEXT,
+        bank_qr_url VARCHAR(255),
+        horario_inicio VARCHAR(5) DEFAULT '09:00',
+        horario_fin VARCHAR(5) DEFAULT '18:00',
+        dias_trabajo JSON,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ Tabla "CONFIGURACION" creada');
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS CUPON (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        codigo VARCHAR(60) NOT NULL UNIQUE,
+        descripcion TEXT,
+        descuento_pct DECIMAL(5,2) NOT NULL,
+        vigente_desde DATE,
+        vigente_hasta DATE,
+        activo BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('✓ Tabla "CUPON" creada');
+
     await connection.execute(
-      'ALTER TABLE SLOT_RESERVA ADD COLUMN IF NOT EXISTS observaciones TEXT'
+      "ALTER TABLE PAGO_FACTURA MODIFY COLUMN metodo ENUM('efectivo','qr','tarjeta','link_pago','transferencia') NOT NULL"
     );
-    console.log('✓ Columna "observaciones" agregada a SLOT_RESERVA');
+    console.log('✓ Actualizado ENUM de metodo en PAGO_FACTURA');
+
+    await connection.execute(
+      "ALTER TABLE PAGO_FACTURA MODIFY COLUMN estado ENUM('pendiente','pagado','pendiente_verificacion','rechazado','reembolsado') DEFAULT 'pendiente'"
+    );
+    console.log('✓ Actualizado ENUM de estado en PAGO_FACTURA');
+
+    // Asegurar que exista una fila de configuración
+    await connection.execute(
+      `INSERT INTO CONFIGURACION (capacidad_diaria, politica_cancelacion, bank_qr_url, horario_inicio, horario_fin, dias_trabajo)
+       SELECT 10, 'La cancelación debe hacerse con al menos 24 horas de antelación para evitar cargos. Las cancelaciones a última hora pueden ser rechazadas o sujetas a un cobro parcial.', '', '09:00', '18:00', JSON_ARRAY('lunes','martes','miercoles','jueves','viernes')
+       FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM CONFIGURACION)`
+    );
+    console.log('✓ Fila de configuración inicial creada si no existía');
 
     console.log('\n✅ Migración completada exitosamente');
     process.exit(0);

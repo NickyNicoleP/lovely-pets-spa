@@ -86,9 +86,9 @@ export default function GroomerList({ onEdit, onCreate }) {
             <tr key={groomer.id}>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-medium text-gray-900">
-                  {groomer.usuario.nombre} {groomer.usuario.apellido}
+                  {groomer.nombre || 'Groomer sin nombre'}
                 </div>
-                <div className="text-sm text-gray-500">{groomer.usuario.email}</div>
+                <div className="text-sm text-gray-500">{groomer.email || 'Sin email'}</div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {groomer.especialidades || 'Sin especialidades'}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { agendaAPI, clientesAPI, mascotasAPI, serviciosAPI, groomersAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { agendaAPI, clientesAPI, mascotasAPI, serviciosAPI, groomersAPI, configAPI, cuponesAPI } from '../services/api';
 
 export default function Agenda() {
   const [reservas, setReservas] = useState([]);
@@ -45,11 +46,23 @@ export default function Agenda() {
     peso: '',
     observaciones: ''
   });
-  const [promociones] = useState([
-    { codigo: 'BIENVENIDA', descuento: 15, descripcion: '15% de descuento en la primera reserva' },
-    { codigo: 'SPA20', descuento: 20, descripcion: '20% de descuento para grooming completo' },
-    { codigo: 'FIEL', descuento: 10, descripcion: '10% de descuento para clientes frecuentes' }
-  ]);
+  const [promociones, setPromociones] = useState([]);
+  const [config, setConfig] = useState({
+    capacidad_diaria: 0,
+    politica_cancelacion: '',
+    bank_qr_url: '',
+    horario_inicio: '09:00',
+    horario_fin: '18:00',
+    dias_trabajo: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+  });
+  const [configMessage, setConfigMessage] = useState('');
+  const [configError, setConfigError] = useState('');
+  const [configLoading, setConfigLoading] = useState(false);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [selectedReservaCancel, setSelectedReservaCancel] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+
   const sampleReservas = [
     {
       id: 'demo-1',
@@ -80,6 +93,10 @@ export default function Agenda() {
   const [selectedReservaPago, setSelectedReservaPago] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
   const [selectedPromoCode, setSelectedPromoCode] = useState('');
+  const [newCouponData, setNewCouponData] = useState({ codigo: '', descuento_pct: '', descripcion: '' });
+  const [newCouponMessage, setNewCouponMessage] = useState('');
+  const [newCouponError, setNewCouponError] = useState('');
+  const { user } = useAuth();
 
   const resumenReservas = useMemo(() => {
     const estados = { pendiente: 0, confirmada: 0, completada: 0, cancelada: 0 };
@@ -109,6 +126,11 @@ export default function Agenda() {
     }
   }, [formData.servicio_id, formData.fecha, showModal]);
 
+  useEffect(() => {
+    loadCupones();
+    loadConfig();
+  }, []);
+
   const loadReservas = async () => {
     try {
       const response = await agendaAPI.getAll({ fecha: selectedDate });
@@ -129,12 +151,84 @@ export default function Agenda() {
     }
   };
 
+  const loadCupones = async () => {
+    try {
+      const response = await cuponesAPI.getAll();
+      setPromociones(response.data);
+    } catch (error) {
+      console.error('Error al cargar cupones:', error);
+      setPromociones([
+        { codigo: 'BIENVENIDA', descuento_pct: 15, descripcion: '15% de descuento en la primera reserva' },
+        { codigo: 'SPA20', descuento_pct: 20, descripcion: '20% de descuento para grooming completo' },
+        { codigo: 'FIEL', descuento_pct: 10, descripcion: '10% de descuento para clientes frecuentes' }
+      ]);
+    }
+  };
+
+  const loadConfig = async () => {
+    try {
+      const response = await configAPI.get();
+      setConfig(response.data);
+    } catch (error) {
+      console.error('Error al cargar configuración:', error);
+    }
+  };
+
+  const saveScheduleConfig = async () => {
+    setConfigLoading(true);
+    setConfigError('');
+    setConfigMessage('');
+    try {
+      const response = await configAPI.update(config);
+      setConfig(response.data);
+      setConfigMessage('Horario y configuración guardados correctamente.');
+    } catch (error) {
+      console.error('Error al guardar configuración:', error);
+      setConfigError(error.response?.data?.error || error.message || 'No se pudo guardar la configuración.');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const toggleDiaTrabajo = (dia) => {
+    const dias = Array.isArray(config.dias_trabajo) ? [...config.dias_trabajo] : [];
+    if (dias.includes(dia)) {
+      setConfig({ ...config, dias_trabajo: dias.filter((item) => item !== dia) });
+    } else {
+      setConfig({ ...config, dias_trabajo: [...dias, dia] });
+    }
+  };
+
   const loadGroomers = async () => {
     try {
       const response = await groomersAPI.getAll();
       setGroomers(response.data);
     } catch (error) {
       console.error('Error al cargar groomers:', error);
+    }
+  };
+
+  const handleCreateCoupon = async (e) => {
+    e.preventDefault();
+    setNewCouponMessage('');
+    setNewCouponError('');
+
+    if (!newCouponData.codigo.trim() || !newCouponData.descuento_pct) {
+      setNewCouponError('El código y el porcentaje de descuento son obligatorios.');
+      return;
+    }
+
+    try {
+      await cuponesAPI.create({
+        codigo: newCouponData.codigo.trim(),
+        descuento_pct: Number(newCouponData.descuento_pct),
+        descripcion: newCouponData.descripcion.trim() || null
+      });
+      setNewCouponMessage('Código de descuento creado correctamente.');
+      setNewCouponData({ codigo: '', descuento_pct: '', descripcion: '' });
+      loadCupones();
+    } catch (error) {
+      setNewCouponError(error.response?.data?.error || error.message || 'No se pudo crear el código de descuento.');
     }
   };
 
@@ -245,7 +339,8 @@ export default function Agenda() {
   const calcularPrecioConPromo = (precio, promoCode) => {
     const promo = promociones.find((p) => p.codigo === promoCode);
     if (!promo) return Number(precio || 0);
-    return Number((precio * (1 - promo.descuento / 100)).toFixed(2));
+    const descuento = Number(promo.descuento_pct ?? promo.descuento ?? 0);
+    return Number((precio * (1 - descuento / 100)).toFixed(2));
   };
 
   const handleOpenPaymentModal = (reserva) => {
@@ -253,6 +348,45 @@ export default function Agenda() {
     setSelectedPromoCode('');
     setPaymentMethod('efectivo');
     setPaymentModalOpen(true);
+  };
+
+  const handleApplyCoupon = async (codigo) => {
+    if (!codigo) {
+      setCouponMessage('');
+      return;
+    }
+    try {
+      const response = await cuponesAPI.validate(codigo);
+      setCouponMessage(`Cupón aplicado: ${response.data.descripcion || response.data.codigo}`);
+    } catch (error) {
+      setCouponMessage(error.response?.data?.error || 'Cupón no válido o expirado');
+    }
+  };
+
+  const openCancelModal = (reserva) => {
+    setSelectedReservaCancel(reserva);
+    setCancelReason('');
+    setCancelModalOpen(true);
+  };
+
+  const closeCancelModal = () => {
+    setSelectedReservaCancel(null);
+    setCancelReason('');
+    setCancelModalOpen(false);
+  };
+
+  const handleSubmitCancel = async () => {
+    if (!selectedReservaCancel) return;
+    try {
+      await agendaAPI.update(selectedReservaCancel.id, {
+        estado: 'cancelada',
+        observaciones: cancelReason || 'Cancelación del cliente'
+      });
+      closeCancelModal();
+      loadReservas();
+    } catch (error) {
+      alert(error.response?.data?.error || error.message);
+    }
   };
 
   const handleConfirmarPago = async () => {
@@ -291,7 +425,8 @@ export default function Agenda() {
       fecha: formData.fecha || null,
       hora: formData.hora || null,
       observaciones: formData.observaciones ? String(formData.observaciones).trim() : null,
-      precio_final: precioCalculado || null
+      precio_final: precioCalculado || null,
+      codigo_cupon: formData.promoCode || null
     };
 
     try {
@@ -362,6 +497,87 @@ export default function Agenda() {
         </div>
       </div>
 
+      {user && ['admin', 'administrador', 'empleado'].includes(user.rol) && (
+        <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Horario de atención del spa</h2>
+              <p className="text-sm text-gray-600 mt-1">Define los días de atención y la ventana horaria en la que se generan los slots disponibles.</p>
+            </div>
+            <button
+              type="button"
+              onClick={saveScheduleConfig}
+              disabled={configLoading}
+              className="btn btn-primary"
+            >
+              {configLoading ? 'Guardando...' : 'Guardar horario'}
+            </button>
+          </div>
+
+          {configError && (
+            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {configError}
+            </div>
+          )}
+
+          {configMessage && (
+            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+              {configMessage}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label">Hora de apertura</label>
+              <input
+                type="time"
+                className="input"
+                value={config.horario_inicio || '09:00'}
+                onChange={(e) => setConfig({ ...config, horario_inicio: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Hora de cierre</label>
+              <input
+                type="time"
+                className="input"
+                value={config.horario_fin || '18:00'}
+                onChange={(e) => setConfig({ ...config, horario_fin: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <p className="text-sm font-medium text-gray-900 mb-2">Días de atención</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+              {[
+                { key: 'lunes', label: 'Lun' },
+                { key: 'martes', label: 'Mar' },
+                { key: 'miercoles', label: 'Mié' },
+                { key: 'jueves', label: 'Jue' },
+                { key: 'viernes', label: 'Vie' },
+                { key: 'sabado', label: 'Sáb' },
+                { key: 'domingo', label: 'Dom' }
+              ].map((dia) => (
+                <button
+                  key={dia.key}
+                  type="button"
+                  onClick={() => toggleDiaTrabajo(dia.key)}
+                  className={`rounded-2xl border px-3 py-2 text-sm font-medium transition ${
+                    Array.isArray(config.dias_trabajo) && config.dias_trabajo.includes(dia.key)
+                      ? 'border-primary-600 bg-primary-50 text-primary-800'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  {dia.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-sm text-gray-500">Los horarios disponibles solo se ofrecerán en los días y horas definidos aquí.</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 mb-6 md:grid-cols-4">
         {[
           { label: 'Reservas', value: reservas.length, accent: 'bg-primary-50 text-primary-700' },
@@ -400,10 +616,54 @@ export default function Agenda() {
             <div key={promo.codigo} className="rounded-3xl border border-primary-100 bg-primary-50 p-4">
               <p className="text-sm font-semibold text-primary-700">{promo.codigo}</p>
               <p className="text-sm text-gray-600 mt-2">{promo.descripcion}</p>
-              <p className="mt-3 text-sm font-medium text-primary-700">{promo.descuento}%</p>
+              <p className="mt-3 text-sm font-medium text-primary-700">{promo.descuento_pct ?? promo.descuento}%</p>
             </div>
           ))}
         </div>
+
+        {user?.rol === 'admin' && (
+          <div className="mt-6 rounded-3xl border border-gray-200 bg-gray-50 p-5">
+            <h3 className="text-base font-semibold text-gray-900">Agregar código de descuento de cupón</h3>
+            <p className="text-sm text-gray-500 mt-1">Crea y administra los códigos de cupón válidos para tus reservas.</p>
+            <form className="mt-4 space-y-4" onSubmit={handleCreateCoupon}>
+              <div>
+                <label className="label">Código de cupón</label>
+                <input
+                  className="input"
+                  value={newCouponData.codigo}
+                  onChange={(e) => setNewCouponData({ ...newCouponData, codigo: e.target.value })}
+                  placeholder="Ej. FIEL10"
+                />
+              </div>
+              <div>
+                <label className="label">% de descuento</label>
+                <input
+                  type="number"
+                  className="input"
+                  value={newCouponData.descuento_pct}
+                  onChange={(e) => setNewCouponData({ ...newCouponData, descuento_pct: e.target.value })}
+                  placeholder="10"
+                  min="1"
+                  max="100"
+                />
+              </div>
+              <div>
+                <label className="label">Descripción</label>
+                <input
+                  className="input"
+                  value={newCouponData.descripcion}
+                  onChange={(e) => setNewCouponData({ ...newCouponData, descripcion: e.target.value })}
+                  placeholder="Promoción fiel para clientes frecuentes"
+                />
+              </div>
+              {newCouponMessage && <p className="text-sm text-green-600">{newCouponMessage}</p>}
+              {newCouponError && <p className="text-sm text-red-600">{newCouponError}</p>}
+              <button type="submit" className="btn btn-primary">
+                Crear código de descuento
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Date selector */}
@@ -532,6 +792,9 @@ export default function Agenda() {
                   <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
                     <p className="text-sm text-gray-500">Detalle</p>
                     <p className="mt-2 text-sm text-gray-700">{reserva.observaciones || 'Sin observaciones'}</p>
+                    {reserva.codigo_cupon && (
+                      <p className="mt-2 text-xs font-semibold text-green-700">Cupón: {reserva.codigo_cupon}</p>
+                    )}
                   </div>
                 </div>
 
@@ -543,6 +806,15 @@ export default function Agenda() {
                       className="btn btn-secondary"
                     >
                       Registrar pago
+                    </button>
+                  )}
+                  {reserva.estado !== 'cancelada' && (
+                    <button
+                      type="button"
+                      onClick={() => openCancelModal(reserva)}
+                      className="btn btn-warning"
+                    >
+                      Cancelar reserva
                     </button>
                   )}
                   <button
@@ -752,26 +1024,33 @@ export default function Agenda() {
                   <option value="">Sin asignar</option>
                   {groomers.map((groomer) => (
                     <option key={groomer.id} value={groomer.id}>
-                      {groomer.usuario_nombre || `Groomer ${groomer.id}`}
+                      {`Groomer ${groomer.id} – ${groomer.nombre || `Groomer ${groomer.id}`}`}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="mb-4">
-                <label className="label">Promoción</label>
+                <label className="label">Promoción fiel</label>
+                <p className="text-sm text-gray-500">Código de cupón para descuento</p>
                 <select
                   className="input"
                   value={formData.promoCode || ''}
-                  onChange={(e) => setFormData({ ...formData, promoCode: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, promoCode: e.target.value });
+                    handleApplyCoupon(e.target.value);
+                  }}
                 >
                   <option value="">Ninguna</option>
                   {promociones.map((promo) => (
                     <option key={promo.codigo} value={promo.codigo}>
-                      {promo.codigo} - {promo.descuento}%
+                      {promo.codigo} - {promo.descuento_pct ?? promo.descuento}%
                     </option>
                   ))}
                 </select>
+                {couponMessage && (
+                  <p className="text-sm mt-2 text-green-600">{couponMessage}</p>
+                )}
                 {selectedService && formData.promoCode && (
                   <p className="text-sm text-green-600 mt-2">
                     Precio con promo: Bs {calcularPrecioConPromo(selectedService.precio_base ?? selectedService.precio ?? 0, formData.promoCode).toFixed(2)}
@@ -858,25 +1137,33 @@ export default function Agenda() {
                   >
                     <option value="efectivo">Efectivo</option>
                     <option value="qr">QR</option>
+                    <option value="transferencia">Transferencia</option>
                     <option value="tarjeta">Tarjeta</option>
                     <option value="link_pago">Link de pago</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="label">Promoción</label>
+                  <label className="label">Promoción fiel</label>
+                  <p className="text-sm text-gray-500">Código de cupón para descuento</p>
                   <select
                     className="input"
                     value={selectedPromoCode}
-                    onChange={(e) => setSelectedPromoCode(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedPromoCode(e.target.value);
+                      handleApplyCoupon(e.target.value);
+                    }}
                   >
                     <option value="">Ninguna</option>
                     {promociones.map((promo) => (
                       <option key={promo.codigo} value={promo.codigo}>
-                        {promo.codigo} - {promo.descuento}%
+                        {promo.codigo} - {promo.descuento_pct ?? promo.descuento}%
                       </option>
                     ))}
                   </select>
+                  {couponMessage && (
+                    <p className="text-sm mt-2 text-green-600">{couponMessage}</p>
+                  )}
                 </div>
 
                 <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
@@ -902,6 +1189,36 @@ export default function Agenda() {
                 >
                   Confirmar pago
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelModalOpen && selectedReservaCancel && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title" className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 id="cancel-modal-title" className="text-xl font-bold text-gray-900 mb-4">Cancelar reserva</h2>
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-gray-100 bg-gray-50 p-4">
+                <p className="text-sm text-gray-500">Política de cancelación</p>
+                <p className="mt-2 text-sm text-gray-700 whitespace-pre-line">
+                  {config.politica_cancelacion || 'Las cancelaciones deben realizarse con al menos 24 horas de antelación para evitar cargos.'}
+                </p>
+              </div>
+              <div>
+                <label className="label">Motivo de cancelación</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Describe el motivo de la cancelación"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={closeCancelModal} className="flex-1 btn btn-outline">Volver</button>
+                <button type="button" onClick={handleSubmitCancel} className="flex-1 btn btn-danger">Confirmar cancelación</button>
               </div>
             </div>
           </div>

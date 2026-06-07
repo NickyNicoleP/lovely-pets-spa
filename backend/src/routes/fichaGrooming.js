@@ -26,6 +26,9 @@ router.post('/', authenticateToken, requireRole(['admin', 'empleado', 'groomer']
 // ✅ SEGURIDAD: solo admin/empleado/groomer pueden agregar insumo
 router.post('/:id/insumo', authenticateToken, requireRole(['admin', 'empleado', 'groomer']), fichaGroomingController.addInsumo);
 
+// ✅ SEGURIDAD: solo admin/empleado/groomer pueden actualizar el estado de un insumo
+router.put('/:id/insumo/:insumoId', authenticateToken, validateOwnershipOrAdmin('ficha_grooming', 'id'), requireRole(['admin', 'empleado', 'groomer']), fichaGroomingController.updateInsumo);
+
 // ✅ SEGURIDAD: Actualizar ficha (estado de ingreso, observaciones, checkboxes)
 router.put('/:id', authenticateToken, validateOwnershipOrAdmin('ficha_grooming', 'id'), requireRole(['admin', 'empleado', 'groomer']), fichaGroomingController.update);
 

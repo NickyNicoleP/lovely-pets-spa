@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { productosAPI } from '../services/api';
+import { productosAPI, categoriasAPI } from '../services/api';
 
 export default function Productos() {
   const [productos, setProductos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showGaleria, setShowGaleria] = useState(false);
@@ -15,12 +16,23 @@ export default function Productos() {
     descripcion: '',
     precio: '',
     stock: '',
-    umbral_alerta: ''
+    umbral_alerta: '',
+    categoria_id: ''
   });
 
   useEffect(() => {
     loadProductos();
+    loadCategorias();
   }, []);
+
+  const loadCategorias = async () => {
+    try {
+      const response = await categoriasAPI.getAll();
+      setCategorias(response.data);
+    } catch (error) {
+      console.error('Error al cargar categorías:', error);
+    }
+  };
 
   const loadProductos = async () => {
     try {
@@ -52,7 +64,7 @@ export default function Productos() {
       }
       setShowModal(false);
       setEditingProducto(null);
-      setFormData({ nombre: '', descripcion: '', precio: '', stock: '', umbral_alerta: '' });
+      setFormData({ nombre: '', descripcion: '', precio: '', stock: '', umbral_alerta: '', categoria_id: '' });
       loadProductos();
     } catch (error) {
       alert(error.response?.data?.error || error.message);
@@ -66,7 +78,8 @@ export default function Productos() {
       descripcion: producto.descripcion || '',
       precio: producto.precio,
       stock: producto.stock,
-      umbral_alerta: producto.umbral_alerta
+      umbral_alerta: producto.umbral_alerta,
+      categoria_id: producto.categoria_id || ''
     });
     setShowModal(true);
   };
@@ -89,7 +102,7 @@ export default function Productos() {
     setUploadingImage(true);
     try {
       const formDataFile = new FormData();
-      formDataFile.append('imagen', file);
+      formDataFile.append('archivo', file);
 
       // Subir archivo
       const uploadResponse = await productosAPI.uploadImage(formDataFile);
@@ -152,7 +165,7 @@ export default function Productos() {
         <button
           onClick={() => {
             setEditingProducto(null);
-            setFormData({ nombre: '', descripcion: '', precio: '', stock: '', umbral_alerta: '' });
+            setFormData({ nombre: '', descripcion: '', precio: '', stock: '', umbral_alerta: '', categoria_id: '' });
             setShowModal(true);
           }}
           className="btn btn-primary"
@@ -205,9 +218,13 @@ export default function Productos() {
                 <div>
                   <h3 className="font-bold text-gray-900 text-sm">{producto.nombre}</h3>
                   <p className="text-xs text-gray-500 mt-0.5">{producto.descripcion}</p>
+                  {producto.categoria_nombre && (
+                    <p className="text-[11px] uppercase tracking-wide text-primary-600 mt-1">
+                      {producto.categoria_nombre}
+                    </p>
+                  )}
                 </div>
               </div>
-              
               <div className="flex items-center justify-between mb-4 pb-4 border-b border-primary-200">
                 <p className="text-lg font-bold text-primary-600">Bs {producto.precio}</p>
                 <div className={`px-2 py-1 rounded-full text-xs font-semibold ${getStockColor(producto.stock, producto.umbral_alerta)}`}>
@@ -272,6 +289,23 @@ export default function Productos() {
                   onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                   placeholder="Describe el producto..."
                 />
+              </div>
+
+              <div>
+                <label className="label">Categoría *</label>
+                <select
+                  className="input"
+                  value={formData.categoria_id}
+                  onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
+                  required
+                >
+                  <option value="">Seleccionar categoría</option>
+                  {categorias.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nombre}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

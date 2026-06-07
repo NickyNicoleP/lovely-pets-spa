@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { agendaAPI, pagosAPI } from '../services/api';
+import { agendaAPI, pagosAPI, configAPI } from '../services/api';
 
 export default function Caja() {
   const getLocalIsoDate = () => {
@@ -17,6 +17,8 @@ export default function Caja() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedReserva, setSelectedReserva] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('efectivo');
+  const [referencia, setReferencia] = useState('');
+  const [config, setConfig] = useState({ bank_qr_url: '' });
   const [montoRecibido, setMontoRecibido] = useState('');
   const [filterMetodo, setFilterMetodo] = useState('todos');
   const [searchText, setSearchText] = useState('');
@@ -24,6 +26,7 @@ export default function Caja() {
   useEffect(() => {
     loadReservas();
     loadPagos();
+    loadConfig();
   }, [selectedDate]);
 
   const loadReservas = async () => {
@@ -49,6 +52,15 @@ export default function Caja() {
     }
   };
 
+  const loadConfig = async () => {
+    try {
+      const response = await configAPI.get();
+      setConfig(response.data || { bank_qr_url: '' });
+    } catch (err) {
+      console.error('Error cargando configuración:', err);
+    }
+  };
+
   const openPayment = (reserva) => {
     setSelectedReserva(reserva);
     setPaymentMethod('efectivo');
@@ -62,27 +74,51 @@ export default function Caja() {
     return Math.max(0, (recibido - precio)).toFixed(2);
   };
 
+  const openQrLink = () => {
+    if (config?.bank_qr_url) {
+      window.open(config.bank_qr_url, '_blank');
+    }
+  };
+
   const registrarPago = async () => {
     if (!selectedReserva) return;
+
     const precio = Number(selectedReserva?.precio_final || selectedReserva?.precio_servicio || 0);
-    const recibido = Number(montoRecibido || precio);
+    const recibido = paymentMethod === 'efectivo' ? Number(montoRecibido || precio) : precio;
     const vuelto = paymentMethod === 'efectivo' ? Number(calcularCambio()) : 0;
 
-    const referencia = `Recibido:${recibido};Vuelto:${vuelto}`;
+    if (paymentMethod === 'efectivo' && recibido < precio) {
+      alert('El monto recibido debe ser igual o mayor al monto total.');
+      return;
+    }
+
+    if (paymentMethod !== 'efectivo' && !referencia.trim()) {
+      alert('Ingrese una referencia para el pago.');
+      return;
+    }
+
+    const referenciaText = paymentMethod === 'efectivo'
+      ? `Recibido:${recibido};Vuelto:${vuelto}`
+      : referencia.trim();
 
     try {
       await pagosAPI.create({
         reserva_id: selectedReserva.id,
         monto: precio,
         metodo: paymentMethod,
-        referencia
+        referencia: referenciaText
       });
+
+      if (paymentMethod === 'qr' && config.bank_qr_url) {
+        openQrLink();
+      }
 
       generarComprobante(selectedReserva, paymentMethod, recibido, vuelto);
 
       setPaymentModalOpen(false);
       setSelectedReserva(null);
       setMontoRecibido('');
+      setReferencia('');
       loadReservas();
       loadPagos();
     } catch (err) {
@@ -328,7 +364,7 @@ export default function Caja() {
   };
 
   const totalesPorMetodo = useMemo(() => {
-    const totals = { efectivo: 0, qr: 0, tarjeta: 0, link_pago: 0, desconocido: 0 };
+    const totals = { efectivo: 0, qr: 0, tarjeta: 0, link_pago: 0, transferencia: 0, desconocido: 0 };
     pagos.forEach((p) => {
       const metodo = p.metodo || 'desconocido';
       const monto = Number(p.monto || 0);
@@ -401,6 +437,7 @@ export default function Caja() {
             <div className="flex justify-between"><span>QR</span><span>Bs {totalesPorMetodo.qr.toFixed(2)}</span></div>
             <div className="flex justify-between"><span>Tarjeta</span><span>Bs {totalesPorMetodo.tarjeta.toFixed(2)}</span></div>
             <div className="flex justify-between"><span>Link Pago</span><span>Bs {totalesPorMetodo.link_pago.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>Transferencia</span><span>Bs {totalesPorMetodo.transferencia.toFixed(2)}</span></div>
             <div className="border-t pt-2 mt-2 flex justify-between font-semibold"><span>Total</span><span>Bs {totalGeneral.toFixed(2)}</span></div>
           </div>
         </div>
@@ -416,6 +453,7 @@ export default function Caja() {
               <option value="qr">QR</option>
               <option value="tarjeta">Tarjeta</option>
               <option value="link_pago">Link Pago</option>
+              <option value="transferencia">Transferencia</option>
             </select>
             <input placeholder="Buscar cliente, mascota o id" value={searchText} onChange={(e) => setSearchText(e.target.value)} className="input" />
           </div>
@@ -431,6 +469,7 @@ export default function Caja() {
                 <th className="p-2">Servicio</th>
                 <th className="p-2">Monto</th>
                 <th className="p-2">Método</th>
+                <th className="p-2">Estado</th>
                 <th className="p-2">Referencia</th>
                 <th className="p-2">Fecha</th>
                 <th className="p-2">Acciones</th>
@@ -445,21 +484,9 @@ export default function Caja() {
                   <td className="p-2">{p.servicio_nombre}</td>
                   <td className="p-2">Bs {Number(p.monto || 0).toFixed(2)}</td>
                   <td className="p-2">{p.metodo}</td>
+                  <td className="p-2">{p.estado || 'N/A'}</td>
                   <td className="p-2">
-                    {p.metodo ? (
-                      <>
-                        {p.metodo === 'efectivo' 
-                          ? 'Efectivo'
-                          : p.metodo === 'qr'
-                          ? 'QR'
-                          : p.metodo === 'tarjeta'
-                          ? 'Tarjeta'
-                          : p.metodo === 'link_pago'
-                          ? 'Link Pago'
-                          : p.metodo
-                        } - Recibido: Bs {Number(p.monto || 0).toFixed(2)} | Vuelto: Bs 0.00
-                      </>
-                    ) : '-'}
+                    {p.referencia ? p.referencia : '-'}
                   </td>
                   <td className="p-2">
                     {p.fecha && p.fecha !== 'Invalid Date' 
@@ -523,8 +550,35 @@ export default function Caja() {
                 </div>
               )}
 
+              {paymentMethod !== 'efectivo' && (
+                <div className="space-y-3">
+                  {paymentMethod === 'qr' && (
+                    <div className="rounded-lg border border-pink-200 bg-pink-50 p-4">
+                      <div className="font-semibold text-pink-700">Pago QR</div>
+                      <p className="text-sm text-pink-700 mt-2">
+                        Envía el monto al QR de la cuenta bancaria y registra la referencia de la transacción.
+                      </p>
+                      {config.bank_qr_url ? (
+                        <div className="mt-3 flex flex-col gap-2">
+                          <a href={config.bank_qr_url} target="_blank" rel="noreferrer" className="btn btn-secondary w-full text-center">Abrir QR / Link de pago</a>
+                          <p className="text-xs text-gray-500 break-all">{config.bank_qr_url}</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">No se configuró aún la URL/QR en el panel de administración.</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="label">Referencia de pago</label>
+                    <input type="text" className="input" value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder="Ej. Transacción 123456" />
+                    <p className="text-sm text-gray-500 mt-1">Registra la referencia que te proporciona el banco o pasarela de pago.</p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 mt-4">
-                <button onClick={() => { setPaymentModalOpen(false); setSelectedReserva(null); }} className="flex-1 btn btn-outline">Cancelar</button>
+                <button onClick={() => { setPaymentModalOpen(false); setSelectedReserva(null); setReferencia(''); }} className="flex-1 btn btn-outline">Cancelar</button>
                 <button onClick={registrarPago} className="flex-1 btn btn-primary">Registrar pago</button>
               </div>
             </div>

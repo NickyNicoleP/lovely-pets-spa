@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { inventarioAPI, productosAPI } from '../services/api';
 
 export default function Inventario() {
@@ -78,6 +79,15 @@ export default function Inventario() {
     if (stock <= minimo) return 'text-red-700 bg-red-50';
     if (stock <= minimo * 2) return 'text-amber-700 bg-amber-50';
     return 'text-green-700 bg-emerald-50';
+  };
+
+  const getInsumoEstadoLabel = (estado, origen) => {
+    if (!estado) {
+      return origen?.toLowerCase().includes('grooming') ? 'Entregado' : 'N/A';
+    }
+
+    if (estado === 'merma') return 'Desperdiciado';
+    return estado.charAt(0).toUpperCase() + estado.slice(1);
   };
 
   const lowStockCount = useMemo(
@@ -207,22 +217,38 @@ export default function Inventario() {
             <table className="min-w-full text-left text-sm text-gray-600">
               <thead>
                 <tr>
-                  <th className="p-3">Producto</th>
-                  <th className="p-3">Tipo</th>
+                  <th className="p-3">Insumo entregado</th>
                   <th className="p-3">Cantidad</th>
+                  <th className="p-3">Groomer</th>
+                  <th className="p-3">Servicio / Ficha</th>
+                  <th className="p-3">Estado</th>
                   <th className="p-3">Origen</th>
-                  <th className="p-3">Stock actual</th>
                   <th className="p-3">Fecha</th>
                 </tr>
               </thead>
               <tbody>
                 {movimientos.map((movimiento) => (
                   <tr key={movimiento.id} className="border-t border-gray-200">
-                    <td className="p-3 font-medium text-gray-900">{movimiento.producto_nombre}</td>
-                    <td className="p-3 capitalize">{movimiento.tipo}</td>
+                    <td className="p-3 font-medium text-gray-900">
+                      {movimiento.producto_nombre}
+                      {movimiento.ficha_id && (
+                        <div className="mt-2 text-xs text-slate-500 space-y-1">
+                          <div>Ficha técnica: <Link className="text-fuchsia-600 hover:underline" to={`/grooming/ficha/${movimiento.ficha_id}`}>#{movimiento.ficha_id}</Link></div>
+                          <div>Reserva: {movimiento.reserva_fecha_hora ? new Date(movimiento.reserva_fecha_hora).toLocaleString('es-AR') : '-'}</div>
+                        </div>
+                      )}
+                    </td>
                     <td className="p-3">{movimiento.cantidad}</td>
+                    <td className="p-3">{movimiento.groomer_responsable || '-'}</td>
+                    <td className="p-3">
+                      {movimiento.servicio_nombre ? (
+                        <span>{movimiento.servicio_nombre}</span>
+                      ) : movimiento.ficha_id ? (
+                        <span>Ficha #{movimiento.ficha_id}</span>
+                      ) : '-'}
+                    </td>
+                    <td className="p-3 capitalize">{getInsumoEstadoLabel(movimiento.insumo_estado, movimiento.origen)}</td>
                     <td className="p-3">{movimiento.origen}</td>
-                    <td className="p-3">{movimiento.stock_actual}</td>
                     <td className="p-3">{new Date(movimiento.fecha).toLocaleString('es-AR')}</td>
                   </tr>
                 ))}

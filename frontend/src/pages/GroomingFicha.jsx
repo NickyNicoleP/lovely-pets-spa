@@ -49,10 +49,14 @@ export default function GroomingFicha() {
       setFicha(data);
       setObservaciones(data.observaciones || '');
       setInsumos(data.insumos || []);
-      setChecklist((data.checklist || checklistLabels).map((item) => ({
-        ...item,
-        completed: !!(data.checklist || []).find((check) => check.nombre === item.key && check.realizado)
-      })));
+      setChecklist((data.checklist || checklistLabels).map((item) => {
+        const itemKey = item.key || item.nombre;
+        return {
+          key: itemKey,
+          label: item.label || item.nombre || itemKey,
+          completed: !!(data.checklist || []).find((check) => check.nombre === itemKey && check.realizado)
+        };
+      }));
       setFotosAntes(data.fotos_antes || []);
       setFotosDespues(data.fotos_despues || []);
 
@@ -136,6 +140,19 @@ export default function GroomingFicha() {
       setError('No se pudo guardar la ficha.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdateInsumoState = async (insumoId, estado) => {
+    try {
+      await fichaGroomingAPI.updateInsumoState(id, insumoId, { estado });
+      setInsumos((prev) => prev.map((insumo) =>
+        insumo.id === insumoId ? { ...insumo, estado } : insumo
+      ));
+      setMessage('Estado del insumo actualizado.');
+    } catch (err) {
+      console.error(err);
+      setError('No se pudo actualizar el estado del insumo.');
     }
   };
 
@@ -274,21 +291,40 @@ export default function GroomingFicha() {
 
       <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-fuchsia-700">Insumos usados</h2>
-          <span className="text-sm text-slate-500">Marca los insumos utilizados</span>
+          <div>
+            <h2 className="font-semibold text-fuchsia-700">Insumos usados</h2>
+            <p className="text-sm text-slate-500">Actualiza el estado de cada insumo y registra devoluciones o merma.</p>
+          </div>
+          <span className="text-sm text-slate-500">Estado</span>
         </div>
         <div className="space-y-3">
           {insumos.length === 0 ? (
             <p className="text-sm text-slate-500">No hay insumos registrados para esta ficha.</p>
           ) : (
             insumos.map((insumo) => (
-              <label key={insumo.id} className="flex items-center gap-3 rounded-2xl border border-pink-100 bg-pink-50 p-3">
-                <input type="checkbox" defaultChecked className="h-5 w-5 rounded border-pink-300 text-fuchsia-600" />
-                <div>
-                  <p className="font-medium text-slate-700">{insumo.producto_nombre}</p>
-                  <p className="text-sm text-slate-500">Cantidad: {insumo.cantidad}</p>
+              <div key={insumo.id} className="rounded-2xl border border-pink-100 bg-pink-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium text-slate-700">{insumo.producto_nombre}</p>
+                    <p className="text-sm text-slate-500">Cantidad: {insumo.cantidad}</p>
+                    <p className="text-sm text-slate-500">Categoría: {insumo.categoria_nombre || insumo.producto_tipo || 'N/A'}</p>
+                    {insumo.responsable && <p className="text-sm text-slate-500">Responsable: {insumo.responsable}</p>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={insumo.estado || 'pendiente'}
+                      onChange={(e) => handleUpdateInsumoState(insumo.id, e.target.value)}
+                      className="input"
+                    >
+                      <option value="pendiente">Pendiente</option>
+                      <option value="usado">Usado</option>
+                      <option value="devuelto">Devuelto</option>
+                      <option value="merma">Merma</option>
+                    </select>
+                    <span className="text-sm font-semibold text-slate-700 capitalize">{insumo.estado || 'pendiente'}</span>
+                  </div>
                 </div>
-              </label>
+              </div>
             ))
           )}
         </div>

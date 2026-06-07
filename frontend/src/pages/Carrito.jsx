@@ -72,6 +72,37 @@ export default function Carrito() {
     }
   };
 
+  const categoryLabel = (rawCategory) => {
+    if (!rawCategory) return 'General';
+    const clean = rawCategory.toLowerCase();
+    if (clean.includes('insumo') || clean.includes('higiene') || clean.includes('shampoo') || clean.includes('limpieza')) {
+      return 'Limpieza y Shampoos';
+    }
+    if (clean.includes('juguete') || clean.includes('comida') || clean.includes('alimento') || clean.includes('petfood')) {
+      return 'Juguetes y Comida';
+    }
+    return rawCategory;
+  };
+
+  const groupedProducts = useMemo(() => {
+    return productos.reduce((groups, producto) => {
+      const category = categoryLabel(producto.categoria_nombre || producto.tipo || 'General');
+      if (!groups[category]) groups[category] = [];
+      groups[category].push(producto);
+      return groups;
+    }, {});
+  }, [productos]);
+
+  const sortedGroups = useMemo(() => {
+    const order = ['Limpieza y Shampoos', 'Juguetes y Comida', 'General'];
+    return Object.entries(groupedProducts).sort(([a], [b]) => {
+      const indexA = order.indexOf(a) === -1 ? order.length : order.indexOf(a);
+      const indexB = order.indexOf(b) === -1 ? order.length : order.indexOf(b);
+      if (indexA !== indexB) return indexA - indexB;
+      return a.localeCompare(b);
+    });
+  }, [groupedProducts]);
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-[1.4fr_0.8fr]">
@@ -143,37 +174,65 @@ export default function Carrito() {
         <div className="space-y-4">
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="font-semibold text-gray-900 mb-4">Catálogo</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {productos.map((producto) => (
-                <div key={producto.id} className="rounded-2xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start gap-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-50 text-primary-700 font-semibold">
-                        {producto.nombre?.charAt(0)?.toUpperCase()}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{producto.nombre}</h3>
-                        <p className="text-sm text-gray-500 mt-1">{producto.descripcion || 'Sin descripción'}</p>
-                      </div>
+            {Object.keys(groupedProducts).length === 0 ? (
+            <p className="text-sm text-gray-500">No hay productos disponibles.</p>
+          ) : (
+            <div className="space-y-6">
+              {sortedGroups.map(([category, items]) => (
+                <div
+                  key={category}
+                  className={`rounded-3xl border p-4 ${
+                    category === 'Limpieza y Shampoos'
+                      ? 'border-blue-200 bg-blue-50/50'
+                      : category === 'Juguetes y Comida'
+                      ? 'border-amber-200 bg-amber-50/50'
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">{category}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{items.length} {items.length === 1 ? 'producto' : 'productos'}</p>
                     </div>
-                    <span className="text-sm font-semibold text-gray-900">Bs {Number(producto.precio).toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                    <span>Stock: {producto.stock}</span>
-                    <span className={producto.stock === 0 ? 'text-red-600' : 'text-green-600'}>
-                      {producto.stock === 0 ? 'Agotado' : 'Disponible'}
+                    <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-gray-600 shadow-sm">
+                      Sección
                     </span>
                   </div>
-                  <button
-                    onClick={() => addToCart(producto)}
-                    disabled={producto.stock === 0}
-                    className="btn btn-outline w-full py-2"
-                  >
-                    Añadir al carrito
-                  </button>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {items.map((producto) => (
+                      <div key={producto.id} className="rounded-2xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start gap-3 mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-50 text-primary-700 font-semibold">
+                              {producto.nombre?.charAt(0)?.toUpperCase()}
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-gray-900">{producto.nombre}</h3>
+                              <p className="text-sm text-gray-500 mt-1">{producto.descripcion || 'Sin descripción'}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900">Bs {Number(producto.precio).toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                          <span>Stock: {producto.stock}</span>
+                          <span className={producto.stock === 0 ? 'text-red-600' : 'text-green-600'}>
+                            {producto.stock === 0 ? 'Agotado' : 'Disponible'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => addToCart(producto)}
+                          disabled={producto.stock === 0}
+                          className="btn btn-outline w-full py-2"
+                        >
+                          Añadir al carrito
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
+          )}
           </div>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">

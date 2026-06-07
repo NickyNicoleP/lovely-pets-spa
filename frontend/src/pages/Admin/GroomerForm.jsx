@@ -22,17 +22,30 @@ export default function GroomerForm({ groomer, onClose, onSave }) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const defaultDisponibilidad = {
+      lunes: { inicio: '09:00', fin: '17:00', activo: true },
+      martes: { inicio: '09:00', fin: '17:00', activo: true },
+      miercoles: { inicio: '09:00', fin: '17:00', activo: true },
+      jueves: { inicio: '09:00', fin: '17:00', activo: true },
+      viernes: { inicio: '09:00', fin: '17:00', activo: true },
+      sabado: { inicio: '09:00', fin: '17:00', activo: false },
+      domingo: { inicio: '09:00', fin: '17:00', activo: false }
+    };
+
     loadUsers();
     if (groomer) {
+      const disponibilidad = groomer.disponibilidad_semanal;
+      const parsedDisponibilidad = typeof disponibilidad === 'string'
+        ? JSON.parse(disponibilidad)
+        : disponibilidad;
+
       setFormData({
         usuario_id: groomer.usuario_id,
         ci: groomer.ci || '',
         direccion: groomer.direccion || '',
         especialidades: groomer.especialidades || '',
         turno: groomer.turno || 'mañana',
-        disponibilidad_semanal: groomer.disponibilidad_semanal ? 
-          JSON.parse(groomer.disponibilidad_semanal) : 
-          formData.disponibilidad_semanal
+        disponibilidad_semanal: parsedDisponibilidad || defaultDisponibilidad
       });
     }
   }, [groomer]);
@@ -57,7 +70,7 @@ export default function GroomerForm({ groomer, onClose, onSave }) {
     try {
       const dataToSend = {
         ...formData,
-        disponibilidad_semanal: JSON.stringify(formData.disponibilidad_semanal)
+        disponibilidad_semanal: formData.disponibilidad_semanal
       };
       
       if (groomer) {

@@ -6,11 +6,15 @@ class FichaGroomingService {
   async getAll(filters = {}) {
     let query = `
       SELECT fg.id,
-             fg.slot_id as reserva_id,
+             fg.reserva_id,
              fg.estado_ingreso,
              fg.nudos,
              fg.pulgas,
              fg.heridas,
+             fg.suciedad_extrema,
+             fg.mal_olor,
+             fg.unas_largas,
+             fg.recomendaciones_dueño,
              fg.tiempo_real_min,
              fg.observaciones,
              fg.fecha_cierre,
@@ -30,7 +34,7 @@ class FichaGroomingService {
              s.nombre as servicio_nombre,
              s.precio_base as servicio_precio
       FROM FICHA_GROOMING fg
-      JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
+      JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
       JOIN MASCOTA m ON sr.mascota_id = m.id
       JOIN CLIENTE c ON m.cliente_id = c.id
       JOIN USUARIO u ON c.usuario_id = u.id
@@ -58,13 +62,17 @@ class FichaGroomingService {
   }
 
   async getById(id) {
-    const fichasResult = await pool.execute(
+    const [fichas] = await pool.execute(
       `SELECT fg.id,
-              fg.slot_id as reserva_id,
+              fg.reserva_id,
               fg.estado_ingreso,
               fg.nudos,
               fg.pulgas,
               fg.heridas,
+              fg.suciedad_extrema,
+              fg.mal_olor,
+              fg.unas_largas,
+              fg.recomendaciones_dueño,
               fg.tiempo_real_min,
               fg.observaciones,
               fg.fecha_cierre,
@@ -84,7 +92,7 @@ class FichaGroomingService {
               s.nombre as servicio_nombre,
               s.precio_base as servicio_precio
       FROM FICHA_GROOMING fg
-      JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
+      JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
       JOIN MASCOTA m ON sr.mascota_id = m.id
       JOIN CLIENTE c ON m.cliente_id = c.id
       JOIN USUARIO u ON c.usuario_id = u.id
@@ -92,32 +100,29 @@ class FichaGroomingService {
       WHERE fg.id = ?`,
       [id]
     );
-    const fichas = Array.isArray(fichasResult) ? (Array.isArray(fichasResult[0]) ? fichasResult[0] : fichasResult) : [];
 
     if (fichas.length === 0) {
       throw new Error('Ficha no encontrada');
     }
 
-    const insumosResult = await pool.execute(
-      `SELECT fi.*, p.nombre as producto_nombre, p.precio as producto_precio
+    const [insumos] = await pool.execute(
+      `SELECT fi.*, p.nombre as producto_nombre, p.precio as producto_precio, p.tipo as producto_tipo, c.nombre as categoria_nombre, c.descripcion as categoria_descripcion
        FROM FICHA_INSUMO fi
        JOIN PRODUCTO p ON fi.producto_id = p.id
+       LEFT JOIN CATEGORIA c ON p.categoria_id = c.id
        WHERE fi.ficha_id = ?`,
       [id]
     );
-    const insumos = Array.isArray(insumosResult) ? (Array.isArray(insumosResult[0]) ? insumosResult[0] : insumosResult) : [];
 
-    const checklistResult = await pool.execute(
+    const [checklist] = await pool.execute(
       `SELECT nombre, realizado FROM CHECKLIST_ITEM WHERE ficha_id = ? ORDER BY id`,
       [id]
     );
-    const checklist = Array.isArray(checklistResult) ? (Array.isArray(checklistResult[0]) ? checklistResult[0] : checklistResult) : [];
 
-    const fotosResult = await pool.execute(
+    const [fotos] = await pool.execute(
       `SELECT id, url, tipo FROM FOTO_SERVICIO WHERE ficha_id = ?`,
       [id]
     );
-    const fotos = Array.isArray(fotosResult) ? (Array.isArray(fotosResult[0]) ? fotosResult[0] : fotosResult) : [];
 
     const ficha = fichas[0];
     ficha.insumos = insumos;
@@ -142,6 +147,10 @@ class FichaGroomingService {
       nudos = false,
       pulgas = false,
       heridas = false,
+      suciedad_extrema = false,
+      mal_olor = false,
+      unas_largas = false,
+      recomendaciones_dueño = null,
       tiempo_real_min,
       observaciones
     } = fichaData;
@@ -156,7 +165,7 @@ class FichaGroomingService {
     }
 
     const [existentes] = await pool.execute(
-      'SELECT id FROM FICHA_GROOMING WHERE slot_id = ?',
+      'SELECT id FROM FICHA_GROOMING WHERE reserva_id = ?',
       [reserva_id]
     );
 
@@ -165,14 +174,18 @@ class FichaGroomingService {
     }
 
     const [result] = await pool.execute(
-      `INSERT INTO FICHA_GROOMING (slot_id, estado_ingreso, nudos, pulgas, heridas, tiempo_real_min, observaciones)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO FICHA_GROOMING (reserva_id, estado_ingreso, nudos, pulgas, heridas, suciedad_extrema, mal_olor, unas_largas, recomendaciones_dueño, tiempo_real_min, observaciones)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reserva_id,
         estado_ingreso ? JSON.stringify(estado_ingreso) : null,
         nudos ? 1 : 0,
         pulgas ? 1 : 0,
         heridas ? 1 : 0,
+        suciedad_extrema ? 1 : 0,
+        mal_olor ? 1 : 0,
+        unas_largas ? 1 : 0,
+        recomendaciones_dueño || null,
         tiempo_real_min || null,
         observaciones || null
       ]
@@ -197,7 +210,15 @@ class FichaGroomingService {
   }
 
   async addInsumo(fichaId, insumoData, userId) {
-    const { producto_id, cantidad } = insumoData;
+    const productoId = Number(insumoData.producto_id);
+    const cantidad = Number(insumoData.cantidad);
+
+    if (!productoId || Number.isNaN(productoId)) {
+      throw new Error('Producto inválido');
+    }
+    if (!cantidad || Number.isNaN(cantidad) || cantidad <= 0) {
+      throw new Error('Cantidad de insumo inválida');
+    }
 
     const [fichas] = await pool.execute(
       'SELECT * FROM FICHA_GROOMING WHERE id = ?',
@@ -210,7 +231,7 @@ class FichaGroomingService {
 
     const [productos] = await pool.execute(
       'SELECT * FROM PRODUCTO WHERE id = ?',
-      [producto_id]
+      [productoId]
     );
 
     if (productos.length === 0) {
@@ -221,24 +242,104 @@ class FichaGroomingService {
       throw new Error('Stock insuficiente');
     }
 
+    const responsable = insumoData.responsable || null;
     await pool.execute(
-      'INSERT INTO FICHA_INSUMO (ficha_id, producto_id, cantidad) VALUES (?, ?, ?)',
-      [fichaId, producto_id, cantidad]
+      'INSERT INTO FICHA_INSUMO (ficha_id, producto_id, cantidad, estado, responsable) VALUES (?, ?, ?, ?, ?)',
+      [fichaId, productoId, cantidad, 'pendiente', responsable]
     );
 
     await pool.execute(
       'UPDATE PRODUCTO SET stock = stock - ? WHERE id = ?',
-      [cantidad, producto_id]
+      [cantidad, productoId]
     );
 
     // Log inventory movement for immediate deduction
     await pool.execute(
       'INSERT INTO MOVIMIENTO_INVENTARIO (producto_id, tipo, cantidad, origen, referencia_id) VALUES (?, ?, ?, ?, ?)',
-      [producto_id, 'salida', cantidad, 'Grooming (Preparación)', fichaId]
+      [productoId, 'salida', cantidad, 'Grooming (Preparación)', fichaId]
     );
 
-    await authService.registrarAudit(userId, null, null, null, 'agregar_insumo', insumoData);
+    await authService.registrarAudit(userId, null, null, null, 'agregar_insumo', {
+      ...insumoData,
+      ficha_id: fichaId,
+      responsable
+    });
     return { message: 'Insumo agregado correctamente' };
+  }
+
+  async updateInsumo(fichaId, insumoId, updateData, userId) {
+    const { estado, responsable } = updateData;
+    const [insumos] = await pool.execute(
+      'SELECT * FROM FICHA_INSUMO WHERE id = ? AND ficha_id = ?',
+      [insumoId, fichaId]
+    );
+
+    if (insumos.length === 0) {
+      throw new Error('Insumo no encontrado');
+    }
+
+    const insumoActual = insumos[0];
+    const validEstados = ['pendiente', 'usado', 'devuelto', 'merma'];
+    const updates = [];
+    const params = [];
+
+    if (estado !== undefined) {
+      if (!validEstados.includes(estado)) {
+        throw new Error('Estado de insumo inválido');
+      }
+      updates.push('estado = ?');
+      params.push(estado);
+    }
+
+    if (responsable !== undefined) {
+      updates.push('responsable = ?');
+      params.push(responsable || null);
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No se proporcionaron cambios válidos para el insumo');
+    }
+
+    await pool.execute(
+      `UPDATE FICHA_INSUMO SET ${updates.join(', ')} WHERE id = ?`,
+      [...params, insumoId]
+    );
+
+    if (estado === 'devuelto' && insumoActual.estado !== 'devuelto') {
+      await pool.execute(
+        'UPDATE PRODUCTO SET stock = stock + ? WHERE id = ?',
+        [insumoActual.cantidad, insumoActual.producto_id]
+      );
+      await pool.execute(
+        'INSERT INTO MOVIMIENTO_INVENTARIO (producto_id, tipo, cantidad, origen, referencia_id) VALUES (?, ?, ?, ?, ?)',
+        [insumoActual.producto_id, 'entrada', insumoActual.cantidad, 'Devolución de insumo grooming', fichaId]
+      );
+    }
+
+    if (estado === 'merma' && insumoActual.estado !== 'merma') {
+      await pool.execute(
+        'INSERT INTO MOVIMIENTO_INVENTARIO (producto_id, tipo, cantidad, origen, referencia_id) VALUES (?, ?, ?, ?, ?)',
+        [insumoActual.producto_id, 'salida', insumoActual.cantidad, 'Merma de insumo grooming', fichaId]
+      );
+    }
+
+    const [updatedInsumos] = await pool.execute(
+      `SELECT fi.*, p.nombre as producto_nombre, p.precio as producto_precio, p.tipo as producto_tipo, c.nombre as categoria_nombre
+       FROM FICHA_INSUMO fi
+       JOIN PRODUCTO p ON fi.producto_id = p.id
+       LEFT JOIN CATEGORIA c ON p.categoria_id = c.id
+       WHERE fi.id = ?`,
+      [insumoId]
+    );
+
+    const updated = updatedInsumos[0];
+    await authService.registrarAudit(userId, null, null, null, 'actualizar_insumo_ficha', {
+      ficha_id: fichaId,
+      insumo_id: insumoId,
+      cambios: updateData
+    });
+
+    return updated;
   }
 
   async update(fichaId, fichaData, userId) {
@@ -277,7 +378,7 @@ class FichaGroomingService {
 
   async close(fichaId, userId) {
     const [fichas] = await pool.execute(
-      'SELECT fg.*, sr.id as reserva_id FROM FICHA_GROOMING fg JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id WHERE fg.id = ?',
+      'SELECT fg.*, sr.id as reserva_id FROM FICHA_GROOMING fg JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id WHERE fg.id = ?',
       [fichaId]
     );
 
@@ -322,7 +423,7 @@ class FichaGroomingService {
         COUNT(*) as total_fichas,
         SUM(CASE WHEN fecha_cierre IS NOT NULL THEN 1 ELSE 0 END) as fichas_cerradas,
         SUM(CASE WHEN fecha_cierre IS NULL THEN 1 ELSE 0 END) as fichas_abiertas,
-        COUNT(DISTINCT slot_id) as reservas_atendidas,
+        COUNT(DISTINCT reserva_id) as reservas_atendidas,
         COUNT(DISTINCT DATE(fecha_cierre)) as dias_atencion
        FROM FICHA_GROOMING
        WHERE fecha_cierre BETWEEN ? AND ?`,

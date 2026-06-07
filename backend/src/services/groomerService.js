@@ -73,6 +73,56 @@ class GroomerService {
 
     return this.getById(id);
   }
+
+  async update(id, data, userId) {
+    const groomerAnterior = await this.getById(id);
+    const fields = {};
+
+    if (data.ci !== undefined) {
+      fields.ci = data.ci || null;
+    }
+    if (data.direccion !== undefined) {
+      fields.direccion = data.direccion || null;
+    }
+    if (data.especialidades !== undefined) {
+      fields.especialidades = data.especialidades || null;
+    }
+    if (data.turno !== undefined) {
+      fields.turno = data.turno || null;
+    }
+    if (data.activo !== undefined) {
+      fields.activo = data.activo ? 1 : 0;
+    }
+    if (data.disponibilidad_semanal !== undefined) {
+      fields.disponibilidad_semanal = JSON.stringify(data.disponibilidad_semanal || {});
+    }
+
+    if (Object.keys(fields).length === 0) {
+      throw new Error('No hay campos para actualizar');
+    }
+
+    const setClause = Object.keys(fields).map((field) => `${field} = ?`).join(', ');
+    const params = [...Object.values(fields), id];
+
+    await pool.execute(
+      `UPDATE GROOMER SET ${setClause} WHERE id = ?`,
+      params
+    );
+
+    await authService.registrarAudit(userId, null, null, null, 'actualizar_groomer', {
+      anterior: groomerAnterior,
+      nuevo: {
+        ci: data.ci !== undefined ? data.ci : groomerAnterior.ci,
+        direccion: data.direccion !== undefined ? data.direccion : groomerAnterior.direccion,
+        especialidades: data.especialidades !== undefined ? data.especialidades : groomerAnterior.especialidades,
+        turno: data.turno !== undefined ? data.turno : groomerAnterior.turno,
+        activo: data.activo !== undefined ? data.activo : groomerAnterior.activo,
+        disponibilidad_semanal: data.disponibilidad_semanal !== undefined ? data.disponibilidad_semanal : groomerAnterior.disponibilidad_semanal
+      }
+    });
+
+    return this.getById(id);
+  }
 }
 
 module.exports = new GroomerService();

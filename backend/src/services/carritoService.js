@@ -2,6 +2,7 @@ const pool = require('../config/database');
 const authService = require('./authService');
 const notificacionService = require('./notificacionService');
 const productoService = require('./productoService');
+const cuponService = require('./cuponService');
 
 class CarritoService {
   async getClienteIdForUser(userId) {
@@ -69,7 +70,7 @@ class CarritoService {
   }
 
   async createOrder(userId, orderData) {
-    const { items, canal = 'local' } = orderData;
+    const { items, canal = 'local', coupon_code } = orderData;
 
     if (!Array.isArray(items) || items.length === 0) {
       throw new Error('El carrito debe contener al menos un producto');
@@ -113,11 +114,18 @@ class CarritoService {
       };
     });
 
-    const total = itemsNormalized.reduce((sum, item) => sum + item.subtotal, 0);
+    let total = itemsNormalized.reduce((sum, item) => sum + item.subtotal, 0);
+    let couponCode = null;
+
+    if (coupon_code) {
+      const cupon = await cuponService.getByCode(coupon_code);
+      couponCode = cupon.codigo;
+      total = Number((total * (1 - Number(cupon.descuento_pct || 0) / 100)).toFixed(2));
+    }
 
     const [result] = await pool.execute(
-      `INSERT INTO CARRITO_PEDIDO (cliente_id, items, total, canal) VALUES (?, ?, ?, ?)`,
-      [clienteId, JSON.stringify(itemsNormalized), total, canal]
+      `INSERT INTO CARRITO_PEDIDO (cliente_id, items, total, cupon_codigo, canal) VALUES (?, ?, ?, ?, ?)`,
+      [clienteId, JSON.stringify(itemsNormalized), total, couponCode, canal]
     );
 
     const orderId = result.insertId;

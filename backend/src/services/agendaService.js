@@ -1,5 +1,7 @@
 const pool = require('../config/database');
 const authService = require('./authService');
+const cuponService = require('./cuponService');
+const configService = require('./configService');
 
 class AgendaService {
   async getAll(filters = {}, userId, userRole) {
@@ -11,6 +13,7 @@ class AgendaService {
              TIME(CONVERT_TZ(a.fecha_hora, '+00:00', '-04:00')) as hora,
              a.estado,
              a.precio_final,
+             a.codigo_cupon,
              a.canal_reserva,
              m.id as mascota_id,
              m.nombre as mascota_nombre,
@@ -53,8 +56,12 @@ class AgendaService {
       query += ' AND u.id = ?';
       params.push(userId);
     } else if (userRole === 'groomer') {
+      const groomerId = await this.getGroomerIdByUsuarioId(userId);
+      if (!groomerId) {
+        return [];
+      }
       query += ' AND a.groomer_id = ?';
-      params.push(userId);
+      params.push(groomerId);
     }
 
     query += ' ORDER BY a.fecha_hora';
@@ -72,6 +79,7 @@ class AgendaService {
               TIME(CONVERT_TZ(a.fecha_hora, '+00:00', '-04:00')) as hora,
               a.estado,
               a.precio_final,
+              a.codigo_cupon,
               a.canal_reserva,
               m.id as mascota_id,
               m.nombre as mascota_nombre,
@@ -106,11 +114,25 @@ class AgendaService {
     if (userRole === 'cliente' && reserva.cliente_usuario_id !== userId) {
       throw new Error('No autorizado para ver esta reserva');
     }
-    if (userRole === 'groomer' && reserva.groomer_id !== userId) {
-      throw new Error('No autorizado para ver esta reserva');
+    if (userRole === 'groomer') {
+      const groomerId = await this.getGroomerIdByUsuarioId(userId);
+      if (!groomerId || reserva.groomer_id !== groomerId) {
+        throw new Error('No autorizado para ver esta reserva');
+      }
     }
 
     return reserva;
+  }
+
+  async getGroomerIdByUsuarioId(usuarioId) {
+    const [rows] = await pool.execute(
+      'SELECT id FROM GROOMER WHERE usuario_id = ? AND activo = TRUE LIMIT 1',
+      [usuarioId]
+    );
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+    return rows[0].id;
   }
 
   async create(reservaData, userId, userRole) {
@@ -152,9 +174,19 @@ class AgendaService {
     const endDate = fechaHoraFin.toISOString().slice(0, 19).replace('T', ' ');
 
     const computedPrecioFinal = Number((precioBase * (1 + ajusteRazaPct / 100)).toFixed(2));
-    const precioFinal = precio_final != null && !Number.isNaN(Number(precio_final))
+    const couponCode = reservaData.codigo_cupon || reservaData.promoCode || null;
+    let precioFinal = precio_final != null && !Number.isNaN(Number(precio_final))
       ? Number(precio_final)
       : computedPrecioFinal;
+    let codigoCupon = null;
+
+    if (couponCode) {
+      const cupon = await cuponService.getByCode(couponCode);
+      codigoCupon = cupon.codigo;
+      precioFinal = Number((computedPrecioFinal * (1 - Number(cupon.descuento_pct || 0) / 100)).toFixed(2));
+    }
+
+    await this.verifyDailyCapacity(fecha);
 
     // Nota: la disponibilidad se verifica más abajo dependiendo si se especifica groomer
 
@@ -175,9 +207,9 @@ class AgendaService {
     // Si no se especifica groomer_id, dejar como NULL
 
     const insertResult = await pool.execute(
-      `INSERT INTO SLOT_RESERVA (groomer_id, mascota_id, servicio_id, fecha_hora, fecha_hora_fin, precio_final, estado, canal_reserva)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [asignadoGroomerId, mascota_id, servicio_id, startDate, endDate, precioFinal, 'pendiente', 'web']
+      `INSERT INTO SLOT_RESERVA (groomer_id, mascota_id, servicio_id, fecha_hora, fecha_hora_fin, precio_final, codigo_cupon, estado, canal_reserva)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [asignadoGroomerId, mascota_id, servicio_id, startDate, endDate, precioFinal, codigoCupon, 'pendiente', 'web']
     );
 
     const resultObj = Array.isArray(insertResult)
@@ -205,6 +237,23 @@ class AgendaService {
         precio_final: precioFinal,
         estado: 'pendiente'
       };
+    }
+  }
+
+  async verifyDailyCapacity(fecha) {
+    const capacidadDiaria = Number((await configService.getConfig()).capacidad_diaria || 0);
+    if (!capacidadDiaria || capacidadDiaria <= 0) {
+      return;
+    }
+
+    const [rows] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM SLOT_RESERVA WHERE DATE(fecha_hora) = ? AND estado != 'cancelada'`,
+      [fecha]
+    );
+
+    const count = rows?.[0]?.total ?? 0;
+    if (count >= capacidadDiaria) {
+      throw new Error(`La capacidad diaria para ${fecha} ya se alcanzó (${capacidadDiaria}). Escoge otra fecha.`);
     }
   }
 
@@ -289,6 +338,44 @@ class AgendaService {
     await pool.execute(query, params);
     await authService.registrarAudit(userId, null, null, null, 'actualizar_reserva', { anterior: reservaAnterior, nuevo: reservaData });
     return this.getById(id);
+  }
+
+  async delete(id, userId, userRole) {
+    const reservaAnterior = await this.getById(id, userId, userRole);
+
+    if (reservaAnterior.estado === 'cancelada') {
+      throw new Error('La reserva ya está cancelada');
+    }
+
+    await pool.execute('UPDATE SLOT_RESERVA SET estado = ? WHERE id = ?', ['cancelada', id]);
+    await authService.registrarAudit(userId, null, null, null, 'cancelar_reserva', { anterior: reservaAnterior });
+
+    const [reservaRows] = await pool.execute(
+      `SELECT a.id,
+              a.groomer_id,
+              CONVERT_TZ(a.fecha_hora, '+00:00', '-04:00') as fecha_hora,
+              DATE(CONVERT_TZ(a.fecha_hora, '+00:00', '-04:00')) as fecha,
+              TIME(CONVERT_TZ(a.fecha_hora, '+00:00', '-04:00')) as hora,
+              a.estado,
+              a.precio_final,
+              a.codigo_cupon,
+              a.canal_reserva,
+              m.id as mascota_id,
+              m.nombre as mascota_nombre,
+              s.id as servicio_id,
+              s.nombre as servicio_nombre
+       FROM SLOT_RESERVA a
+       JOIN MASCOTA m ON a.mascota_id = m.id
+       JOIN SERVICIO s ON a.servicio_id = s.id
+       WHERE a.id = ?`,
+      [id]
+    );
+
+    if (!reservaRows || reservaRows.length === 0) {
+      throw new Error('Reserva no encontrada');
+    }
+
+    return reservaRows[0];
   }
 
   normalizeDateValue(value) {
@@ -446,6 +533,15 @@ class AgendaService {
     return startMinutes >= windowStart && endMinutes <= windowEnd;
   }
 
+  isGlobalDateOpen(fecha, diasTrabajo) {
+    if (!Array.isArray(diasTrabajo) || diasTrabajo.length === 0) {
+      return true;
+    }
+    const diasSemana = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const diaClave = diasSemana[fecha.getDay()];
+    return diasTrabajo.includes(diaClave);
+  }
+
   async hasBlockingInterval(groomerId, fechaHoraInicio, fechaHoraFin) {
     const bloqueosResult = await pool.execute(
       `SELECT id FROM BLOQUEO_AGENDA
@@ -565,11 +661,20 @@ class AgendaService {
       disponibilidad_semanal: this.parseDisponibilidadSemanal(g.disponibilidad_semanal)
     }));
 
+    const spaConfig = await configService.getConfig();
+    if (!this.isGlobalDateOpen(new Date(fecha), spaConfig.dias_trabajo)) {
+      return [];
+    }
+
     const reservasResult = await pool.execute(
       `SELECT fecha_hora, fecha_hora_fin, groomer_id FROM SLOT_RESERVA
        WHERE DATE(fecha_hora) = ? AND estado != 'cancelada'`,
       [fecha]
     );
+    const capacidadDiaria = Number(spaConfig.capacidad_diaria || 0);
+    if (capacidadDiaria > 0 && reservasResult[0].length >= capacidadDiaria) {
+      return [];
+    }
     const reservas = Array.isArray(reservasResult) && reservasResult[0] ? reservasResult[0] : [];
 
     const bloqueosResult = await pool.execute(
@@ -600,9 +705,13 @@ class AgendaService {
     });
 
     const horarios = [];
-    const horaApertura = 9;
-    const horaCierre = 18;
-    const ultimaSalida = this.buildLaPazDateTime(fecha, `${horaCierre.toString().padStart(2, '0')}:00:00`);
+    const horarioInicio = spaConfig.horario_inicio || '09:00';
+    const horarioFin = spaConfig.horario_fin || '18:00';
+    const [inicioHora, inicioMinuto] = horarioInicio.split(':').map(Number);
+    const [finHora, finMinuto] = horarioFin.split(':').map(Number);
+    const aperturaMinutos = inicioHora * 60 + inicioMinuto;
+    const cierreMinutos = finHora * 60 + finMinuto;
+    const ultimaSalida = this.buildLaPazDateTime(fecha, `${finHora.toString().padStart(2, '0')}:${finMinuto.toString().padStart(2, '0')}:00`);
 
     const isGroomerFree = (groomer, inicio, fin) => {
       if (!this.isWithinWeeklyAvailability(inicio, fin, groomer.disponibilidad_semanal)) {
@@ -620,18 +729,18 @@ class AgendaService {
       return true;
     };
 
-    for (let hora = horaApertura; hora < horaCierre; hora++) {
-      for (let minuto = 0; minuto < 60; minuto += 30) {
-        const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}:00`;
-        const inicio = this.buildLaPazDateTime(fecha, horaStr);
-        const fin = new Date(inicio.getTime() + duracionTotal * 60000);
-        if (fin > ultimaSalida) {
-          continue;
-        }
+    for (let minutos = aperturaMinutos; minutos < cierreMinutos; minutos += 30) {
+      const hora = Math.floor(minutos / 60);
+      const minuto = minutos % 60;
+      const horaStr = `${hora.toString().padStart(2, '0')}:${minuto.toString().padStart(2, '0')}:00`;
+      const inicio = this.buildLaPazDateTime(fecha, horaStr);
+      const fin = new Date(inicio.getTime() + duracionTotal * 60000);
+      if (fin > ultimaSalida) {
+        continue;
+      }
 
-        if (groomerData.some((groomer) => isGroomerFree(groomer, inicio, fin))) {
-          horarios.push(horaStr);
-        }
+      if (groomerData.some((groomer) => isGroomerFree(groomer, inicio, fin))) {
+        horarios.push(horaStr);
       }
     }
 

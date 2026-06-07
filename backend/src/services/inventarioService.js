@@ -4,9 +4,34 @@ const notificacionService = require('./notificacionService');
 class InventarioService {
   async getAll(filters = {}) {
     let query = `
-      SELECT mi.*, p.nombre as producto_nombre, p.stock as stock_actual, p.umbral_alerta as stock_minimo
+      SELECT mi.*, p.nombre as producto_nombre, p.stock as stock_actual, p.umbral_alerta as stock_minimo,
+             fg.id as ficha_id,
+             s.id as servicio_id,
+             s.nombre as servicio_nombre,
+             sr.fecha_hora as reserva_fecha_hora,
+             (
+               SELECT fi.responsable
+               FROM FICHA_INSUMO fi
+               WHERE fi.ficha_id = mi.referencia_id
+                 AND fi.producto_id = mi.producto_id
+                 AND fi.cantidad = mi.cantidad
+               ORDER BY fi.id DESC
+               LIMIT 1
+             ) AS groomer_responsable,
+             (
+               SELECT fi.estado
+               FROM FICHA_INSUMO fi
+               WHERE fi.ficha_id = mi.referencia_id
+                 AND fi.producto_id = mi.producto_id
+                 AND fi.cantidad = mi.cantidad
+               ORDER BY fi.id DESC
+               LIMIT 1
+             ) AS insumo_estado
       FROM movimiento_inventario mi
       JOIN PRODUCTO p ON mi.producto_id = p.id
+      LEFT JOIN FICHA_GROOMING fg ON mi.referencia_id = fg.id AND mi.origen LIKE '%grooming%'
+      LEFT JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
+      LEFT JOIN SERVICIO s ON sr.servicio_id = s.id
       WHERE 1=1
     `;
     

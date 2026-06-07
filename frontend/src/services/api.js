@@ -152,6 +152,10 @@ export const carritoAPI = {
   updateStatus: (id, data) => api.put(`/carrito/${id}/status`, data)
 };
 
+export const categoriasAPI = {
+  getAll: () => api.get('/categorias')
+};
+
 export const pagosAPI = {
   getAll: (params) => api.get('/pagos', { params }),
   getById: (id) => api.get(`/pagos/${id}`),
@@ -172,12 +176,24 @@ export const agendaAPI = {
   getHorarios: (params) => api.get('/agenda/horarios', { params })
 };
 
+export const configAPI = {
+  get: () => api.get('/config'),
+  update: (data) => api.put('/config', data)
+};
+
+export const cuponesAPI = {
+  getAll: () => api.get('/cupones'),
+  validate: (codigo) => api.get('/cupones/validar', { params: { codigo } }),
+  create: (data) => api.post('/cupones', data)
+};
+
 export const fichaGroomingAPI = {
   getAll: (params) => api.get('/ficha-grooming', { params }),
   getById: (id) => api.get(`/ficha-grooming/${id}`),
   create: (data) => api.post('/ficha-grooming', data),
   update: (id, data) => api.put(`/ficha-grooming/${id}`, data),
   addInsumo: (id, data) => api.post(`/ficha-grooming/${id}/insumo`, data),
+  updateInsumoState: (id, insumoId, data) => api.put(`/ficha-grooming/${id}/insumo/${insumoId}`, data),
   uploadFoto: (id, formData) => {
     const uploadApi = axios.create({
       baseURL: '/api'
@@ -220,9 +236,20 @@ export const groomersAPI = {
 export const reportesAPI = {
   getVentas: (params) => api.get('/reportes/ventas', { params }),
   getAgendaDiaria: (fecha) => api.get('/reportes/agenda-diaria', { params: { fecha } }),
-  getHistorialGroomer: (groomer_id, params) => api.get(`/reportes/groomer/${groomer_id}/historial`, { params }),
-  getEstadisticasGroomer: (groomer_id, params) => api.get(`/reportes/groomer/${groomer_id}/estadisticas`, { params }),
-  getEstadisticasGenerales: (params) => api.get('/reportes/estadisticas', { params })
+  getCajaDiaria: (fecha) => api.get('/reportes/caja-diaria', { params: { fecha } }),
+  getHistorialGroomer: (params) => api.get('/reportes/groomer/historial', { params }),
+  getEstadisticasGroomer: (params) => api.get('/reportes/groomer/estadisticas', { params }),
+  getReporteCliente: () => api.get('/reportes/cliente'),
+  getNpsResumen: (params) => api.get('/reportes/nps', { params }),
+  getRankingRentabilidad: (params) => api.get('/reportes/admin/ranking', { params }),
+  getOcupacionGlobal: (params) => api.get('/reportes/admin/ocupacion', { params }),
+  getAuditoriaInsumos: (params) => api.get('/reportes/admin/insumos', { params }),
+  getEstadisticasGenerales: (params) => api.get('/reportes/estadisticas', { params }),
+  downloadPdf: (params) => api.get('/reportes/pdf', { params, responseType: 'blob' })
+};
+
+export const encuestasAPI = {
+  submitEncuesta: (data) => api.post('/encuestas', data)
 };
 
 export const whatsappAPI = {

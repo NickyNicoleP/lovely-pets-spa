@@ -21,9 +21,11 @@ import Reportes from './pages/Reportes';
 import Perfil from './pages/Perfil';
 import Setup2FA from './pages/Setup2FA';
 import Admin from './pages/Admin';
+import GroomersManagement from './pages/GroomersManagement';
 import Layout from './components/Layout';
 import MascotaNueva from './pages/Cliente/MascotaNueva';
 import MascotasCliente from './pages/Cliente/MascotasCliente';
+import MisCitas from './pages/Cliente/MisCitas';
 
 function AdminRoute({ children }) {
   const { user, loading } = useAuth();
@@ -96,12 +98,17 @@ function AppRoutes() {
           </RoleRoute>
         } />
         <Route path="grooming" element={
-          <RoleRoute allowedRoles={['admin', 'administrador', 'groomer']}>
+          <RoleRoute allowedRoles={['admin', 'administrador', 'empleado', 'groomer']}>
             <Grooming />
           </RoleRoute>
         } />
+        <Route path="grooming/editar-disponibilidad" element={
+          <RoleRoute allowedRoles={['admin', 'administrador', 'empleado']}>
+            <GroomersManagement />
+          </RoleRoute>
+        } />
         <Route path="grooming/ficha/:id" element={
-          <RoleRoute allowedRoles={['admin', 'administrador', 'groomer']}>
+          <RoleRoute allowedRoles={['admin', 'administrador', 'empleado', 'groomer']}>
             <GroomingFicha />
           </RoleRoute>
         } />
@@ -113,6 +120,11 @@ function AppRoutes() {
         <Route path="mis-mascotas" element={
           <RoleRoute allowedRoles={['cliente']}>
             <MascotasCliente />
+          </RoleRoute>
+        } />
+        <Route path="mis-citas" element={
+          <RoleRoute allowedRoles={['cliente']}>
+            <MisCitas />
           </RoleRoute>
         } />
         <Route path="productos" element={<Productos />} />
@@ -128,7 +140,7 @@ function AppRoutes() {
         } />
         <Route path="notificaciones" element={<Notificaciones />} />
         <Route path="reportes" element={
-          <RoleRoute allowedRoles={['admin', 'administrador', 'empleado', 'groomer', 'veterinario']}>
+          <RoleRoute allowedRoles={['admin', 'administrador', 'empleado', 'groomer', 'veterinario', 'cliente']}>
             <Reportes />
           </RoleRoute>
         } />

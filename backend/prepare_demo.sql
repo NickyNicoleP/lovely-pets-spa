@@ -224,17 +224,25 @@ FROM SERVICIO s WHERE s.nombre = 'Hidratación Premium';
 INSERT IGNORE INTO CATEGORIA (nombre, descripcion)
 VALUES
     ('Insumos', 'Productos usados para el cuidado y servicios de grooming'),
-    ('Productos', 'Artículos de venta para mascotas');
+    ('Productos', 'Artículos de venta para mascotas'),
+    ('Limpieza y Shampoos', 'Shampoos, acondicionadores y tratamientos de limpieza para pelaje'),
+    ('Juguetes y Comida', 'Alimentos, golosinas y juguetes para mascotas');
 
 INSERT IGNORE INTO PRODUCTO (nombre, categoria_id, precio, stock, umbral_alerta, tipo, descripcion, activo)
 SELECT 'Shampoo Premium', c.id, 220.00, 25, 5, 'insumo', 'Shampoo profesional para piel sensible', TRUE
-FROM CATEGORIA c WHERE c.nombre = 'Insumos'
+FROM CATEGORIA c WHERE c.nombre IN ('Insumos', 'Limpieza y Shampoos')
 UNION ALL
 SELECT 'Acondicionador Botánico', c.id, 180.00, 20, 5, 'insumo', 'Acondicionador natural para pelaje brillante', TRUE
-FROM CATEGORIA c WHERE c.nombre = 'Insumos'
+FROM CATEGORIA c WHERE c.nombre IN ('Insumos', 'Limpieza y Shampoos')
 UNION ALL
 SELECT 'Cepillo Antiestático', c.id, 150.00, 15, 3, 'ambos', 'Cepillo para eliminar pelo muerto y desenredar', TRUE
-FROM CATEGORIA c WHERE c.nombre = 'Insumos';
+FROM CATEGORIA c WHERE c.nombre = 'Insumos'
+UNION ALL
+SELECT 'Snack de Pollo', c.id, 120.00, 30, 5, 'venta', 'Bocaditos crocantes sabor pollo para perro', TRUE
+FROM CATEGORIA c WHERE c.nombre = 'Juguetes y Comida'
+UNION ALL
+SELECT 'Pelota Rebotadora', c.id, 90.00, 18, 5, 'venta', 'Pelota resistente para juegos y entrenamiento', TRUE
+FROM CATEGORIA c WHERE c.nombre = 'Juguetes y Comida';
 
 -- 6. CREAR VETERINARIO DE PRUEBA (opcional)
 INSERT INTO USUARIO (nombre, apellido, email, password_hash, rol, telefono, ci, direccion, email_verificado, activo) 

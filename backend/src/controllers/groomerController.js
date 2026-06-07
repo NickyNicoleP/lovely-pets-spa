@@ -18,6 +18,16 @@ exports.getById = async (req, res) => {
   }
 };
 
+exports.update = async (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    const groomer = await groomerService.update(req.params.id, req.body, userId);
+    res.json(groomer);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 exports.updateDisponibilidad = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;

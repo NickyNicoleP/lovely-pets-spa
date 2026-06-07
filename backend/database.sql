@@ -148,6 +148,7 @@ CREATE TABLE SLOT_RESERVA (
     fecha_hora_fin DATETIME NOT NULL,
     estado ENUM('pendiente','confirmada','en_proceso','completada','cancelada') DEFAULT 'pendiente',
     precio_final DECIMAL(10,2),
+    codigo_cupon VARCHAR(60),
     canal_reserva VARCHAR(30),
     recordatorio_enviado BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -228,6 +229,8 @@ CREATE TABLE FICHA_INSUMO (
     ficha_id INT NOT NULL,
     producto_id INT NOT NULL,
     cantidad INT NOT NULL,
+    estado ENUM('pendiente','usado','devuelto','merma') DEFAULT 'pendiente',
+    responsable VARCHAR(150) NULL,
     FOREIGN KEY (ficha_id) REFERENCES FICHA_GROOMING(id) ON DELETE CASCADE,
     FOREIGN KEY (producto_id) REFERENCES PRODUCTO(id)
 );
@@ -238,25 +241,60 @@ CREATE TABLE CARRITO_PEDIDO (
     cliente_id INT NOT NULL,
     items JSON NOT NULL,
     total DECIMAL(10,2) NOT NULL,
+    cupon_codigo VARCHAR(60),
     estado ENUM('pendiente','confirmado','entregado','cancelado') DEFAULT 'pendiente',
     canal ENUM('local','whatsapp','telegram') NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (cliente_id) REFERENCES CLIENTE(id)
 );
 
--- 16. PAGO_FACTURA
+-- 16. CONFIGURACION
+CREATE TABLE CONFIGURACION (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    capacidad_diaria INT DEFAULT 10,
+    politica_cancelacion TEXT,
+    bank_qr_url VARCHAR(255),
+    horario_inicio VARCHAR(5) DEFAULT '09:00',
+    horario_fin VARCHAR(5) DEFAULT '18:00',
+    dias_trabajo JSON,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 17. CUPON
+CREATE TABLE CUPON (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    codigo VARCHAR(60) NOT NULL UNIQUE,
+    descripcion TEXT,
+    descuento_pct DECIMAL(5,2) NOT NULL,
+    vigente_desde DATE,
+    vigente_hasta DATE,
+    activo BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 18. PAGO_FACTURA
 CREATE TABLE PAGO_FACTURA (
     id INT PRIMARY KEY AUTO_INCREMENT,
     pedido_id INT NULL,
     reserva_id INT NULL,
     monto DECIMAL(10,2) NOT NULL,
-    metodo ENUM('efectivo','qr','tarjeta','link_pago') NOT NULL,
-    estado ENUM('pendiente','pagado','rechazado','reembolsado') DEFAULT 'pendiente',
+    metodo ENUM('efectivo','qr','tarjeta','link_pago','transferencia') NOT NULL,
+    estado ENUM('pendiente','pagado','pendiente_verificacion','rechazado','reembolsado') DEFAULT 'pendiente',
     referencia VARCHAR(100),
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (pedido_id) REFERENCES CARRITO_PEDIDO(id) ON DELETE SET NULL,
     FOREIGN KEY (reserva_id) REFERENCES SLOT_RESERVA(id) ON DELETE SET NULL,
     CHECK (pedido_id IS NOT NULL OR reserva_id IS NOT NULL)
+);
+
+-- 19. ENCUESTA
+CREATE TABLE ENCUESTA (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    usuario_id INT NOT NULL,
+    puntuacion TINYINT NOT NULL,
+    comentario TEXT NULL,
+    fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES USUARIO(id) ON DELETE CASCADE
 );
 
 -- 17. BLOQUEO_AGENDA

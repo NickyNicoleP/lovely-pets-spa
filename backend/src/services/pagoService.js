@@ -84,11 +84,12 @@ class PagoService {
       throw new Error('Pedido o reserva son requeridos');
     }
 
-    const allowedMethods = ['efectivo', 'qr', 'tarjeta', 'link_pago'];
+    const allowedMethods = ['efectivo', 'qr', 'tarjeta', 'link_pago', 'transferencia'];
     if (!allowedMethods.includes(metodo)) {
       throw new Error('Método de pago inválido');
     }
 
+    const paymentStatus = estado || (['qr', 'link_pago', 'transferencia'].includes(metodo) ? 'pendiente_verificacion' : 'pagado');
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -103,17 +104,19 @@ class PagoService {
           throw new Error('Reserva no encontrada');
         }
 
-        await connection.execute(
-          'UPDATE SLOT_RESERVA SET estado = ?, precio_final = ? WHERE id = ?',
-          ['completada', montoValue, reserva_id]
-        );
+        if (paymentStatus === 'pagado') {
+          await connection.execute(
+            'UPDATE SLOT_RESERVA SET estado = ?, precio_final = ? WHERE id = ?',
+            ['completada', montoValue, reserva_id]
+          );
+        }
       }
 
       const [result] = await connection.execute(
         `INSERT INTO PAGO_FACTURA
          (pedido_id, reserva_id, monto, metodo, estado, referencia)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [pedido_id || null, reserva_id || null, montoValue, metodo, estado || 'pagado', referencia || null]
+        [pedido_id || null, reserva_id || null, montoValue, metodo, paymentStatus, referencia || null]
       );
 
       await connection.commit();

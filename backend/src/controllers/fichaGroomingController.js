@@ -41,8 +41,22 @@ exports.create = async (req, res) => {
 exports.addInsumo = async (req, res) => {
   try {
     const userId = req.user ? req.user.id : null;
-    const result = await fichaGroomingService.addInsumo(req.params.id, req.body, userId);
+    const responsable = req.user ? req.user.nombre : null;
+    const result = await fichaGroomingService.addInsumo(req.params.id, { ...req.body, responsable }, userId);
     res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateInsumo = async (req, res) => {
+  try {
+    const userId = req.user ? req.user.id : null;
+    const { id: fichaId, insumoId } = req.params;
+    const { estado, responsable } = req.body;
+
+    const updatedInsumo = await fichaGroomingService.updateInsumo(fichaId, insumoId, { estado, responsable }, userId);
+    res.json(updatedInsumo);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -91,7 +105,7 @@ exports.close = async (req, res) => {
 
     const [usuarioRows] = await pool.execute(
       `SELECT u.id, u.nombre, u.telefono FROM FICHA_GROOMING fg
-       JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
+       JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
        JOIN MASCOTA m ON sr.mascota_id = m.id
        JOIN CLIENTE c ON m.cliente_id = c.id
        JOIN USUARIO u ON c.usuario_id = u.id

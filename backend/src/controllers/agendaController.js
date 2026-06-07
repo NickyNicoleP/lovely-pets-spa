@@ -158,7 +158,8 @@ exports.update = async (req, res) => {
 exports.delete = async (req, res) => {
   try {
     const userId = req.user.id;
-    const result = await agendaService.delete(req.params.id, userId);
+    const userRole = req.user.rol;
+    const result = await agendaService.delete(req.params.id, userId, userRole);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -5,9 +5,10 @@ const notificacionService = require('./notificacionService');
 class ProductoService {
   async getAll() {
     const [productos] = await pool.execute(
-      `SELECT p.*,
+      `SELECT p.*, c.nombre as categoria_nombre, c.descripcion as categoria_descripcion,
               (SELECT url_imagen FROM FOTO_PRODUCTO fp WHERE fp.producto_id = p.id AND fp.es_principal = TRUE LIMIT 1) AS imagen
        FROM PRODUCTO p
+       LEFT JOIN CATEGORIA c ON p.categoria_id = c.id
        WHERE p.activo = TRUE
        ORDER BY p.nombre`
     );
@@ -16,9 +17,10 @@ class ProductoService {
   
   async getById(id) {
     const [productos] = await pool.execute(
-      `SELECT p.*,
+      `SELECT p.*, c.nombre as categoria_nombre, c.descripcion as categoria_descripcion,
               (SELECT url_imagen FROM FOTO_PRODUCTO fp WHERE fp.producto_id = p.id AND fp.es_principal = TRUE LIMIT 1) AS imagen
        FROM PRODUCTO p
+       LEFT JOIN CATEGORIA c ON p.categoria_id = c.id
        WHERE p.id = ?`,
       [id]
     );
@@ -40,7 +42,7 @@ class ProductoService {
     // Registrar movimiento de inventario inicial
     if (stock > 0) {
       await pool.execute(
-        `INSERT INTO movimiento_inventario (producto_id, tipo, cantidad, motivo, usuario_id) 
+        `INSERT INTO MOVIMIENTO_INVENTARIO (producto_id, tipo, cantidad, origen, referencia_id) 
          VALUES (?, 'entrada', ?, ?, ?)`,
         [result.insertId, stock, 'Stock inicial', userId ?? null]
       );
@@ -59,7 +61,7 @@ class ProductoService {
     await pool.execute(
       `UPDATE PRODUCTO SET nombre = ?, categoria_id = ?, descripcion = ?, precio = ?, stock = ?, umbral_alerta = ?, tipo = ?, activo = ? 
        WHERE id = ?`,
-      [nombre, categoria_id || 1, descripcion || null, precio || 0, stock || 0, umbral_alerta || 5, tipo || 'venta', activo ?? TRUE, id]
+      [nombre, categoria_id || 1, descripcion || null, precio || 0, stock || 0, umbral_alerta || 5, tipo || 'venta', activo ?? true, id]
     );
     
     await authService.registrarAudit(userId, null, null, null, 'actualizar_producto', { anterior: productoAnterior, nuevo: productoData });

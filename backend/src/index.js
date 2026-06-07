@@ -7,6 +7,7 @@ const http = require('http');
 const { initIo } = require('./socket');
 const { startReminderScheduler } = require('./services/notificationScheduler');
 const { getWhatsAppService } = require('./services/whatsappService');
+const { ensureFichaInsumoColumns, ensureEncuestaTable } = require('./startup/dbMigration');
 const { forceHTTPS, securityHeaders } = require('./utils/httpsConfig');
 const { sanitizeResponse } = require('./utils/xssSanitizer');
 const authRoutes = require('./routes/auth');
@@ -15,6 +16,7 @@ const clienteRoutes = require('./routes/clientes');
 const mascotaRoutes = require('./routes/mascotas');
 const servicioRoutes = require('./routes/servicios');
 const productoRoutes = require('./routes/productos');
+const categoriaRoutes = require('./routes/categorias');
 const carritoRoutes = require('./routes/carrito');
 const notificacionesRoutes = require('./routes/notificaciones');
 const agendaRoutes = require('./routes/agenda');
@@ -25,6 +27,9 @@ const pagoRoutes = require('./routes/pagos');
 const auditRoutes = require('./routes/audit');
 const reporteRoutes = require('./routes/reportes');
 const whatsappRoutes = require('./routes/whatsapp');
+const configRoutes = require('./routes/config');
+const cuponesRoutes = require('./routes/cupones');
+const encuestaRoutes = require('./routes/encuestas');
 const { validateCSRF, injectCSRFToken } = require('./middleware/csrfProtection');
 
 const app = express();
@@ -70,6 +75,7 @@ app.use('/api/clientes', clienteRoutes);
 app.use('/api/mascotas', mascotaRoutes);
 app.use('/api/servicios', servicioRoutes);
 app.use('/api/productos', productoRoutes);
+app.use('/api/categorias', categoriaRoutes);
 app.use('/api/carrito', carritoRoutes);
 app.use('/api/notificaciones', notificacionesRoutes);
 app.use('/api/agenda', agendaRoutes);
@@ -80,6 +86,9 @@ app.use('/api/pagos', pagoRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reportes', reporteRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/config', configRoutes);
+app.use('/api/cupones', cuponesRoutes);
+app.use('/api/encuestas', encuestaRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -97,21 +106,32 @@ const server = http.createServer(app);
 
 initIo(server);
 
-server.listen(PORT, () => {
-  console.log(`Servidor PawSpa corriendo en puerto ${PORT}`);
-
-  if (process.env.NODE_ENV !== 'test') {
-    startReminderScheduler();
-    
-    // Initialize WhatsApp service
-    console.log('Initializing WhatsApp service...');
-    getWhatsAppService().then(() => {
-      console.log('WhatsApp service initialized');
-    }).catch((error) => {
-      console.warn('Warning: WhatsApp service initialization failed:', error.message);
-      console.log('The system will continue running without WhatsApp integration');
-    });
+async function startServer() {
+  try {
+    await ensureFichaInsumoColumns();
+    await ensureEncuestaTable();
+  } catch (error) {
+    console.warn('Warning: No se pudieron asegurar columnas de FICHA_INSUMO o tabla ENCUESTA:', error.message);
   }
-});
+
+  server.listen(PORT, () => {
+    console.log(`Servidor PawSpa corriendo en puerto ${PORT}`);
+
+    if (process.env.NODE_ENV !== 'test') {
+      startReminderScheduler();
+      
+      // Initialize WhatsApp service
+      console.log('Initializing WhatsApp service...');
+      getWhatsAppService().then(() => {
+        console.log('WhatsApp service initialized');
+      }).catch((error) => {
+        console.warn('Warning: WhatsApp service initialization failed:', error.message);
+        console.log('The system will continue running without WhatsApp integration');
+      });
+    }
+  });
+}
+
+startServer();
 
 module.exports = app;

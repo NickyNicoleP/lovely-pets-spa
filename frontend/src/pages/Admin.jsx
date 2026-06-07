@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { authAPI } from '../services/api';
+import { authAPI, configAPI } from '../services/api';
 import ErrorMessage from '../components/ErrorMessage';
 import WhatsAppSection from '../components/WhatsAppSection';
 
@@ -25,6 +25,17 @@ export default function Admin() {
   });
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+  const [config, setConfig] = useState({
+    capacidad_diaria: 10,
+    politica_cancelacion: '',
+    bank_qr_url: '',
+    horario_inicio: '09:00',
+    horario_fin: '18:00',
+    dias_trabajo: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
+  });
+  const [configError, setConfigError] = useState('');
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configMessage, setConfigMessage] = useState('');
 
   // Verificar que sea admin
   if (user && user.rol !== 'admin' && user.rol !== 'administrador') {
@@ -34,6 +45,10 @@ export default function Admin() {
   useEffect(() => {
     if (activeTab === 'users') {
       loadUsers();
+    }
+
+    if (activeTab === 'settings') {
+      loadConfig();
     }
   }, [activeTab]);
 
@@ -50,6 +65,43 @@ export default function Admin() {
       setUsers([]);
     } finally {
       setLoadingUsers(false);
+    }
+  };
+
+  const loadConfig = async () => {
+    setConfigLoading(true);
+    setConfigError('');
+    try {
+      const response = await configAPI.get();
+      setConfig(response.data || { capacidad_diaria: 10, politica_cancelacion: '', bank_qr_url: '' });
+    } catch (error) {
+      console.error('Error cargando configuración:', error);
+      setConfigError(error.response?.data?.error || error.message || 'Error al cargar configuración');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const handleSaveConfig = async (e) => {
+    e.preventDefault();
+    setConfigMessage('');
+    setConfigError('');
+    try {
+      const response = await configAPI.update(config);
+      setConfig(response.data);
+      setConfigMessage('Configuración guardada correctamente');
+    } catch (error) {
+      console.error('Error guardando configuración:', error);
+      setConfigError(error.response?.data?.error || error.message || 'Error al guardar configuración');
+    }
+  };
+
+  const toggleDiaTrabajo = (dia) => {
+    const dias = Array.isArray(config.dias_trabajo) ? [...config.dias_trabajo] : [];
+    if (dias.includes(dia)) {
+      setConfig({ ...config, dias_trabajo: dias.filter((item) => item !== dia) });
+    } else {
+      setConfig({ ...config, dias_trabajo: [...dias, dia] });
     }
   };
 
@@ -394,9 +446,108 @@ export default function Admin() {
       {activeTab === 'settings' && (
         <div className="bg-white rounded-2xl border border-slate-200 p-6">
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Configuración del Sistema</h2>
-          <div className="text-slate-600">
-            <p>Las opciones de configuración estarán disponibles próximamente.</p>
-          </div>
+
+          {configError && (
+            <ErrorMessage message={configError} type="error" onClose={() => setConfigError('')} />
+          )}
+
+          {configMessage && (
+            <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-green-700">
+              {configMessage}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveConfig} className="space-y-6">
+            <div>
+              <label className="label">Capacidad diaria de reservas</label>
+              <input
+                type="number"
+                className="input"
+                min="0"
+                value={config.capacidad_diaria ?? 10}
+                onChange={(e) => setConfig({ ...config, capacidad_diaria: Number(e.target.value) })}
+              />
+              <p className="text-sm text-slate-500 mt-2">Deja en 0 para permitir reservas ilimitadas por día.</p>
+            </div>
+
+            <div>
+              <label className="label">Política de cancelación</label>
+              <textarea
+                rows={5}
+                className="input"
+                value={config.politica_cancelacion ?? ''}
+                onChange={(e) => setConfig({ ...config, politica_cancelacion: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className="label">URL QR de pago / instrucciones</label>
+              <input
+                type="text"
+                className="input"
+                value={config.bank_qr_url || ''}
+                onChange={(e) => setConfig({ ...config, bank_qr_url: e.target.value })}
+                placeholder="https://..."
+              />
+              <p className="text-sm text-slate-500 mt-2">Una URL opcional que se mostrará al registrar pagos con QR/transferencia.</p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="label">Hora de apertura</label>
+                <input
+                  type="time"
+                  className="input"
+                  value={config.horario_inicio || '09:00'}
+                  onChange={(e) => setConfig({ ...config, horario_inicio: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Hora de cierre</label>
+                <input
+                  type="time"
+                  className="input"
+                  value={config.horario_fin || '18:00'}
+                  onChange={(e) => setConfig({ ...config, horario_fin: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-slate-900 mb-2">Días de atención</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                {[
+                  { key: 'lunes', label: 'Lun' },
+                  { key: 'martes', label: 'Mar' },
+                  { key: 'miercoles', label: 'Mié' },
+                  { key: 'jueves', label: 'Jue' },
+                  { key: 'viernes', label: 'Vie' },
+                  { key: 'sabado', label: 'Sáb' },
+                  { key: 'domingo', label: 'Dom' }
+                ].map((dia) => (
+                  <button
+                    key={dia.key}
+                    type="button"
+                    onClick={() => toggleDiaTrabajo(dia.key)}
+                    className={`rounded-2xl border px-3 py-2 text-sm font-medium transition ${
+                      Array.isArray(config.dias_trabajo) && config.dias_trabajo.includes(dia.key)
+                        ? 'border-primary-600 bg-primary-50 text-primary-800'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    {dia.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-slate-500">Los horarios se ofrecerán solo en los días y horas definidos aquí.</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button type="submit" className="btn btn-primary" disabled={configLoading}>
+                {configLoading ? 'Guardando...' : 'Guardar configuración'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

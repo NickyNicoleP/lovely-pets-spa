@@ -77,8 +77,9 @@ const validateOwnershipOrAdmin = (resourceType, paramName = 'id') => {
       return res.status(401).json({ error: 'No autenticado' });
     }
 
-    // Admin tiene acceso a todo
-    if (normalizeRole(req.user.rol) === 'admin') {
+    // Admin y empleados tienen acceso a todo
+    const normalizedRole = normalizeRole(req.user.rol);
+    if (normalizedRole === 'admin' || normalizedRole === 'empleado') {
       return next();
     }
 
@@ -117,18 +118,20 @@ const validateOwnershipOrAdmin = (resourceType, paramName = 'id') => {
         );
         isOwner = rows.length > 0 && rows[0].usuario_id === req.user.id;
       } else if (resourceType === 'ficha_grooming') {
-        // Verificar acceso del groomer o propietario
+        // Verificar acceso del groomer o del propietario de la mascota
         const [rows] = await pool.execute(
-          `SELECT c.usuario_id, fg.groomer_id FROM FICHA_GROOMING fg
-           JOIN SLOT_RESERVA sr ON fg.slot_id = sr.id
+          `SELECT c.usuario_id AS propietario_usuario_id, g.usuario_id AS groomer_usuario_id
+           FROM FICHA_GROOMING fg
+           JOIN SLOT_RESERVA sr ON fg.reserva_id = sr.id
            JOIN MASCOTA m ON sr.mascota_id = m.id
            JOIN CLIENTE c ON m.cliente_id = c.id
+           LEFT JOIN GROOMER g ON sr.groomer_id = g.id
            WHERE fg.id = ?`,
           [resourceId]
         );
         if (rows.length > 0) {
-          const isGroomer = req.user.rol === 'groomer' && rows[0].groomer_id === req.user.id;
-          const isOwner_user = rows[0].usuario_id === req.user.id;
+          const isGroomer = req.user.rol === 'groomer' && rows[0].groomer_usuario_id === req.user.id;
+          const isOwner_user = rows[0].propietario_usuario_id === req.user.id;
           isOwner = isGroomer || isOwner_user;
         }
       }
